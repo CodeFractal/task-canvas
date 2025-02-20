@@ -47,39 +47,35 @@ body {
     height: 40px;
     padding: 0 10px;
 }
-
-.task-header > input[type="text"] {
-    background: none;
-    border: none;
-    color: #ccc;
-    text-align: center;
-    font-size: 12px;
-    width: 100%;
-    outline: none;
-}
-
-.toggle {
-    width: 16px;
-    height: 16px;
-    cursor: pointer;
-    margin-right: 10px;
-    user-select: none;
-}
-
-.title {
-    flex-grow: 1;
-    text-align: center;
-    cursor: text;
-    outline: none;
-}
-
-.checkbox {
-    width: 20px;
-    height: 20px;
-    cursor: pointer;
-    margin-left: 0;
-    flex-shrink: 0;
-}
+    .task-header > .toggle {
+        width: 16px;
+        height: 16px;
+        cursor: pointer;
+        margin-right: 10px;
+        user-select: none;
+    }
+    .task-header > .title {
+        flex-grow: 1;
+        text-align: center;
+        outline: none;
+        cursor: default;
+    }
+    .task-header > input[type="text"] {
+        background: none;
+        border: none;
+        color: #ccc;
+        text-align: center;
+        font-size: 12px;
+        width: 100%;
+        outline: none;
+    }
+    .task-header > .checkbox {
+        width: 20px;
+        height: 20px;
+        cursor: pointer;
+        margin-left: 0;
+        flex-shrink: 0;
+    }
 
 .description {
     cursor: text;
