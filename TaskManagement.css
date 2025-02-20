@@ -45,7 +45,7 @@ body {
     color: #ccc;
     font-size: 12px;
     height: 40px;
-    padding: 0 10px;
+    padding: 0 0 0 10px;
 }
     .task-header > .toggle {
         width: 16px;
@@ -69,13 +69,19 @@ body {
         width: 100%;
         outline: none;
     }
-    .task-header > .checkbox {
-        width: 20px;
-        height: 20px;
-        cursor: pointer;
-        margin-left: 0;
-        flex-shrink: 0;
+    .task-header > .custom-checkbox {
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      margin: 6px;
     }
+        .task-header > .custom-checkbox > .checkbox-fill {
+        width: 28px;
+        height: 28px;
+        }
 
 .description {
     cursor: text;

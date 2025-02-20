@@ -292,7 +292,16 @@
             return;
           }
           if (role === 'checkbox') {
+            // Toggle task completion and update the fill opacity.
             taskData.completed = !taskData.completed;
+            const fillElem = controlElem.querySelector('.checkbox-fill');
+            if (fillElem) {
+              // Update the fill-opacity attribute in the inner SVG.
+              const innerRect = fillElem.querySelector('rect[mask]');
+              if(innerRect) {
+                innerRect.setAttribute('fill-opacity', taskData.completed ? '1' : '0.1');
+              }
+            }
             pushUndo({ type: 'toggleComplete', taskId: taskData.id, newValue: taskData.completed, oldValue: !taskData.completed });
             autosave();
             return;
@@ -440,11 +449,26 @@
       title.textContent = taskData.title;
       header.appendChild(title);
       
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.classList.add('checkbox');
+      // Custom Checkbox: Replace the original input checkbox with two divs.
+      const checkbox = document.createElement('div');
+      checkbox.classList.add('custom-checkbox');
       checkbox.setAttribute('data-role', 'checkbox');
-      checkbox.checked = taskData.completed;
+      
+      const checkboxFill = document.createElement('div');
+      checkboxFill.classList.add('checkbox-fill');
+      // Insert the exact SVG provided, using a unique mask id for this task.
+      checkboxFill.innerHTML = `
+<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28" style="background: transparent; background-color: transparent; color-scheme: dark;">
+  <rect x="1" y="1" width="26" height="26" rx="3.75" ry="3.75" fill="none" stroke="#4d4d4d" stroke-width="2"></rect>
+  <defs>
+    <mask id="checkMask-${taskData.id}">
+      <rect x="0" y="0" width="28" height="28" fill="white"></rect>
+      <polyline points="8,15 12,19 20,9" stroke="black" stroke-width="2" stroke-linecap="round" fill="none" stroke-linejoin="round"></polyline>
+    </mask>
+  </defs>
+  <rect x="4" y="4" width="20" height="20" rx="1.9" ry="1.9" fill="#25a599" fill-opacity="${taskData.completed ? '1' : '0.1'}" mask="url(#checkMask-${taskData.id})"></rect>
+</svg>`;
+      checkbox.appendChild(checkboxFill);
       header.appendChild(checkbox);
       
       taskEl.appendChild(header);
