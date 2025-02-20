@@ -60,7 +60,7 @@
       const taskData = {
         id: taskId,
         title: 'New Task',
-        description: 'Description',
+        description: '<p>Description</p>',
         x: x,
         y: y,
         completed: false,
@@ -102,10 +102,14 @@
       
       taskEl.appendChild(header);
       
+      const taskBody = document.createElement('div');
+      taskBody.classList.add('task-body');
+      taskEl.appendChild(taskBody);
+
       const description = document.createElement('div');
       description.classList.add('description');
       description.innerHTML = taskData.description;
-      taskEl.appendChild(description);
+      taskBody.appendChild(description);
       
       title.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -123,7 +127,7 @@
       toggle.addEventListener('click', (e) => {
         e.stopPropagation();
         taskData.collapsed = !taskData.collapsed;
-        description.style.display = taskData.collapsed ? 'none' : 'block';
+        taskBody.style.display = taskData.collapsed ? 'none' : 'block';
         toggle.textContent = taskData.collapsed ? '+' : '-';
         pushUndo({ type: 'toggleCollapse', taskId: taskData.id, newValue: taskData.collapsed, oldValue: !taskData.collapsed });
         autosave();
