@@ -40,6 +40,11 @@
   <script src="DependencyArrow.js"></script>
   
   <script>
+    // Global const configuration
+    const GHOST_ARROW_INVALID_COLOR = "#b3555588";
+    const GHOST_ARROW_VALID_COLOR = "#55b38888";
+    const DEPENDENCY_ARROW_COLOR = "#b3b3b3";
+
     // Global state for tasks and dependencies
     const tasks = {};
     const dependencies = []; // each dependency: { from, to, arrow }
@@ -303,22 +308,24 @@
     
     // Confirm dependency creation (called when ghost arrow is accepted).
     function addDependency(fromId, toId, skipUndo = false) {
+        // Avoid duplicate dependencies.
         if (dependencies.find(dep => dep.from === fromId && dep.to === toId)) return;
         const canvas = document.getElementById('canvas');
         const fromEl = document.querySelector(`.task[data-id="${fromId}"]`);
         const toEl = document.querySelector(`.task[data-id="${toId}"]`);
         if (!fromEl || !toEl) return;
-        // Instead of passing raw coordinates, pass the elements.
-        const arrow = DependencyArrow.createArrow(canvas, fromEl, toEl, { color: "white" });
-        // Instead of arrow.line.addEventListener, use arrow.addEventListener.
+        // Flip the arguments so the arrow points from prerequisite to dependent,
+        // and pass in the current zoom factor.
+        const arrow = DependencyArrow.createArrow(canvas, toEl, fromEl, { color: DEPENDENCY_ARROW_COLOR, pzZoomFactor: panzoomInstance.getScale() });
+        canvas.prepend(arrow.svg);
         arrow.addEventListener("contextmenu", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        currentDependencyTarget = { from: fromId, to: toId, arrow: arrow };
-        const depContextMenu = document.getElementById('dependencyContextMenu');
-        depContextMenu.style.display = 'block';
-        depContextMenu.style.left = e.pageX + 'px';
-        depContextMenu.style.top = e.pageY + 'px';
+          e.preventDefault();
+          e.stopPropagation();
+          currentDependencyTarget = { from: fromId, to: toId, arrow: arrow };
+          const depContextMenu = document.getElementById('dependencyContextMenu');
+          depContextMenu.style.display = 'block';
+          depContextMenu.style.left = e.pageX + 'px';
+          depContextMenu.style.top = e.pageY + 'px';
         });
         dependencies.push({ from: fromId, to: toId, arrow: arrow });
         if (!skipUndo) {
@@ -334,7 +341,8 @@
           const fromEl = document.querySelector(`.task[data-id="${dep.from}"]`);
           const toEl = document.querySelector(`.task[data-id="${dep.to}"]`);
           if (!fromEl || !toEl) return;
-          dep.arrow.update(fromEl, toEl);
+          // Update using the flipped order and pass the zoom factor.
+          dep.arrow.update(toEl, fromEl, { pzZoomFactor: panzoomInstance.getScale() });
         }
       });
     }
@@ -550,34 +558,31 @@
       });
       
       // Initiate dependency creation:
-      // "Requires ..." means the fixed task is the source.
+      // "Requires ..." means the fixed task is the dependent (it requires another task).
       document.getElementById('requiresDepMenu').addEventListener('click', () => {
           dependencyCreationMode = "source";
-          dependencyCreationFixedTask = currentTaskTarget; // fixed source
+          dependencyCreationFixedTask = currentTaskTarget; // fixed dependent task
           ghostSnapTarget = null;
           const canvasRect = document.getElementById('canvas').getBoundingClientRect();
           const taskEl = document.querySelector(`.task[data-id="${dependencyCreationFixedTask}"]`);
           const rect = taskEl.getBoundingClientRect();
           const fixedPoint = { x: rect.left + rect.width/2 - canvasRect.left, y: rect.top + rect.height/2 - canvasRect.top };
-          // For "Requires", pass the fixed element as the start.
-          ghostArrow = DependencyArrow.createArrow(document.getElementById('canvas'), taskEl, fixedPoint, { color: "white" });
-          // Set ghost appearance
-          ghostArrow.setColor("rgba(255,255,255,0.5)");
+          // For "Requires", flip the arguments so the arrow will be drawn from the prerequisite (later chosen) to the dependent.
+          ghostArrow = DependencyArrow.createArrow(document.getElementById('canvas'), fixedPoint, taskEl, { color: GHOST_ARROW_INVALID_COLOR, pzZoomFactor: panzoomInstance.getScale() });
           document.getElementById('taskContextMenu').style.display = 'none';
       });
       
-      // "Required by ..." means the fixed task is the target.
+      // "Required by ..." means the fixed task is the prerequisite.
       document.getElementById('requiredByDepMenu').addEventListener('click', () => {
         dependencyCreationMode = "target";
-        dependencyCreationFixedTask = currentTaskTarget; // fixed target
+        dependencyCreationFixedTask = currentTaskTarget; // fixed prerequisite task
         ghostSnapTarget = null;
         const canvasRect = document.getElementById('canvas').getBoundingClientRect();
         const taskEl = document.querySelector(`.task[data-id="${dependencyCreationFixedTask}"]`);
         const rect = taskEl.getBoundingClientRect();
         const fixedPoint = { x: rect.left + rect.width/2 - canvasRect.left, y: rect.top + rect.height/2 - canvasRect.top };
-        // For "Required by", pass the fixed element as the end.
-        ghostArrow = DependencyArrow.createArrow(document.getElementById('canvas'), fixedPoint, taskEl, { color: "white" });
-        ghostArrow.setColor("rgba(255,255,255,0.5)");
+        // For "Required by", flip the arguments so the arrow will be drawn from the prerequisite to the dependent (to be chosen).
+        ghostArrow = DependencyArrow.createArrow(document.getElementById('canvas'), taskEl, fixedPoint, { color: GHOST_ARROW_INVALID_COLOR, pzZoomFactor: panzoomInstance.getScale() });
         document.getElementById('taskContextMenu').style.display = 'none';
       });
       
@@ -609,17 +614,23 @@
             const fixedEl = document.querySelector(`.task[data-id="${dependencyCreationFixedTask}"]`);
             if (ghostSnapTarget) {
               const targetEl = document.querySelector(`.task[data-id="${ghostSnapTarget}"]`);
-              ghostArrow.update(fixedEl, targetEl);
+              // For "Requires": arrow should be drawn from the prerequisite (targetEl) to the dependent (fixedEl)
+              ghostArrow.update(targetEl, fixedEl, { pzZoomFactor: panzoomInstance.getScale() });
+              ghostArrow.setColor(GHOST_ARROW_VALID_COLOR);
             } else {
-              ghostArrow.update(fixedEl, mousePos);
+              ghostArrow.update(mousePos, fixedEl, { pzZoomFactor: panzoomInstance.getScale() });
+              ghostArrow.setColor(GHOST_ARROW_INVALID_COLOR);
             }
           } else if (dependencyCreationMode === "target") {
             const fixedEl = document.querySelector(`.task[data-id="${dependencyCreationFixedTask}"]`);
             if (ghostSnapTarget) {
               const sourceEl = document.querySelector(`.task[data-id="${ghostSnapTarget}"]`);
-              ghostArrow.update(sourceEl, fixedEl);
+              // For "Required by": arrow should be drawn from the prerequisite (fixedEl) to the dependent (sourceEl)
+              ghostArrow.update(fixedEl, sourceEl, { pzZoomFactor: panzoomInstance.getScale() });
+              ghostArrow.setColor(GHOST_ARROW_VALID_COLOR);
             } else {
-              ghostArrow.update(mousePos, fixedEl);
+              ghostArrow.update(fixedEl, mousePos, { pzZoomFactor: panzoomInstance.getScale() });
+              ghostArrow.setColor(GHOST_ARROW_INVALID_COLOR);
             }
           }
         }
@@ -630,8 +641,10 @@
         if (dependencyCreationMode && e.button === 0) {
           if (ghostSnapTarget) {
             if (dependencyCreationMode === "source") {
+              // For "Requires": fixed task is dependent, ghostSnapTarget is prerequisite.
               addDependency(dependencyCreationFixedTask, ghostSnapTarget);
             } else if (dependencyCreationMode === "target") {
+              // For "Required by": fixed task is prerequisite, ghostSnapTarget is dependent.
               addDependency(ghostSnapTarget, dependencyCreationFixedTask);
             }
           }

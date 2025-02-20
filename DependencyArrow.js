@@ -3,6 +3,7 @@
     const DEFAULT_GRID_SIZE = 20;
     const DEFAULT_MARGIN = 10;
     const FIXED_RADIUS = 10; // desired rounding radius
+    const ARROW_THICKNESS = 2;
 
     // Resolve an endpoint given its "role" ('start' or 'end').
     // For an HTMLElement input:
@@ -10,16 +11,9 @@
     //   with a vertical offset of 20px.
     // - role 'end': return the element’s left edge with a 20px vertical offset.
     // Otherwise, assume input is a coordinate object.
-    function resolveEndpoint(input, role, parent) {
+    function resolveEndpoint(input, role, parent, pzZoomFactor) {
         if (input instanceof HTMLElement) {
-            const parentRect = parent.getBoundingClientRect();
-            const rect = input.getBoundingClientRect();
-            const bounds = {
-                left: rect.left - parentRect.left,
-                top: rect.top - parentRect.top,
-                right: rect.right - parentRect.left,
-                bottom: rect.bottom - parentRect.top
-            };
+            const bounds = getElementBounds(input, parent, pzZoomFactor);
             if (role === 'start') {
                 return { x: bounds.right, y: bounds.top + 20 };
             } else if (role === 'end') {
@@ -28,7 +22,10 @@
                 throw new Error("Unknown role: " + role);
             }
         } else {
-            return input;
+            return {
+                x: input.x / pzZoomFactor,
+                y: input.y / pzZoomFactor
+            };
         }
     }
 
@@ -39,14 +36,14 @@
     }
 
     // Helper: Get element bounds relative to the parent.
-    function getElementBounds(element, parent) {
+    function getElementBounds(element, parent, pzZoomFactor) {
         const parentRect = parent.getBoundingClientRect();
         const rect = element.getBoundingClientRect();
         return {
-            top: rect.top - parentRect.top,
-            bottom: rect.bottom - parentRect.top,
-            left: rect.left - parentRect.left,
-            right: rect.right - parentRect.left
+            top: (rect.top - parentRect.top) / pzZoomFactor,
+            bottom: (rect.bottom - parentRect.top) / pzZoomFactor,
+            left: (rect.left - parentRect.left) / pzZoomFactor,
+            right: (rect.right - parentRect.left) / pzZoomFactor
         };
     }
 
@@ -65,7 +62,7 @@
     //   - If the start is an HTMLElement, use its bottom edge.
     //   - If the end is an HTMLElement, use its top edge.
     //   - Otherwise, use the provided coordinate values.
-    function computeRoute(S, E, gridSize, startElem, endElem, parent) {
+    function computeRoute(S, E, gridSize, startElem, endElem, parent, pzZoomFactor) {
         const minHorizontal = 10;
         let route;
         if (S.x <= E.x && (E.x - S.x >= 2 * minHorizontal)) {
@@ -96,10 +93,10 @@
             let X1 = Math.ceil((S.x + minHorizontal) / gridSize) * gridSize;
             let X_final = Math.floor((E.x - minHorizontal) / gridSize) * gridSize;
             let effectiveStartY = (startElem instanceof HTMLElement)
-                ? getElementBounds(startElem, parent).bottom
+                ? getElementBounds(startElem, parent, pzZoomFactor).bottom
                 : S.y;
             let effectiveEndY = (endElem instanceof HTMLElement)
-                ? getElementBounds(endElem, parent).top
+                ? getElementBounds(endElem, parent, pzZoomFactor).top
                 : E.y;
             let Y_mid = Math.round(((effectiveStartY + effectiveEndY) / 2) / gridSize) * gridSize;
             route = [
@@ -110,6 +107,13 @@
                 { x: X_final, y: E.y },
                 E
             ];
+        }
+        // Shift the last point by the stroke width to avoid overlapping the target element.
+        if (route.length > 0) {
+            const last = route[route.length - 1];
+            if (last.x === E.x) {
+                route[route.length - 1] = { x: last.x - ARROW_THICKNESS, y: last.y };
+            }
         }
         return route;
     }
@@ -132,15 +136,8 @@
 
     // Helper: Check if a coordinate lies strictly within the bounds of an element.
     // Points exactly on the boundary are considered outside.
-    function isPointInsideElement(coord, element, parent) {
-        const parentRect = parent.getBoundingClientRect();
-        const rect = element.getBoundingClientRect();
-        const bounds = {
-            left: rect.left - parentRect.left,
-            top: rect.top - parentRect.top,
-            right: rect.right - parentRect.left,
-            bottom: rect.bottom - parentRect.top
-        };
+    function isPointInsideElement(coord, element, parent, pzZoomFactor) {
+        const bounds = getElementBounds(element, parent, pzZoomFactor);
         return (coord.x > bounds.left && coord.x < bounds.right &&
                 coord.y > bounds.top && coord.y < bounds.bottom);
     }
@@ -266,28 +263,29 @@
         createArrow: function (parent, start, end, options) {
             options = options || {};
             const gridSize = options.gridSize || DEFAULT_GRID_SIZE;
+            const pzZoomFactor = options.pzZoomFactor || 1;
             const margin = DEFAULT_MARGIN;
             arrowCounter++;
             const svgNS = "http://www.w3.org/2000/svg";
 
             // Resolve endpoints.
-            let S = resolveEndpoint(start, 'start', parent);
-            let E = resolveEndpoint(end, 'end', parent);
+            let S = resolveEndpoint(start, 'start', parent, pzZoomFactor);
+            let E = resolveEndpoint(end, 'end', parent, pzZoomFactor);
 
             // Check for "invalid" conditions.
             let invalid = false;
             if (start instanceof HTMLElement) {
-                if (isPointInsideElement(E, start, parent)) {
+                if (isPointInsideElement(E, start, parent, pzZoomFactor)) {
                     invalid = true;
                 }
             }
             if (end instanceof HTMLElement) {
-                if (isPointInsideElement(S, end, parent)) {
+                if (isPointInsideElement(S, end, parent, pzZoomFactor)) {
                     invalid = true;
                 }
             }
 
-            const routePoints = computeRoute(S, E, gridSize, start, end, parent);
+            const routePoints = computeRoute(S, E, gridSize, start, end, parent, pzZoomFactor);
             if (!routePoints) {
                 invalid = true;
             }
@@ -311,12 +309,12 @@
             marker.setAttribute("id", markerId);
             marker.setAttribute("markerWidth", "6");
             marker.setAttribute("markerHeight", "6");
-            marker.setAttribute("refX", "6");
+            marker.setAttribute("refX", "5");
             marker.setAttribute("refY", "3");
             marker.setAttribute("orient", "auto");
             marker.setAttribute("viewBox", "0 0 6 6");
             const markerPath = document.createElementNS(svgNS, "path");
-            markerPath.setAttribute("d", "M0,0 L6,2.5 L6,3.5 L0,6 L1.5,3 z");
+            markerPath.setAttribute("d", "M0,0 L6,3 L0,6 L1.5,3 z");
             markerPath.setAttribute("fill", options.color || "white");
             markerPath.style.pointerEvents = "visiblePainted";
             marker.appendChild(markerPath);
@@ -338,7 +336,7 @@
             path.setAttribute("d", d);
             path.setAttribute("fill", "none");
             path.setAttribute("stroke", options.color || "white");
-            path.setAttribute("stroke-width", "2");
+            path.setAttribute("stroke-width", ARROW_THICKNESS);
             path.setAttribute("marker-end", `url(#${markerId})`);
             path.style.pointerEvents = "visiblePainted";
             if (invalid) {
@@ -347,17 +345,20 @@
             svg.appendChild(path);
 
             const handler = {
-                update: function (newStart, newEnd) {
-                    let S_new = resolveEndpoint(newStart, 'start', parent);
-                    let E_new = resolveEndpoint(newEnd, 'end', parent);
+                svg: svg,
+                update: function (newStart, newEnd, options) {
+                    options = options || {};
+                    const pzZoomFactor = options.pzZoomFactor || 1;
+                    let S_new = resolveEndpoint(newStart, 'start', parent, pzZoomFactor);
+                    let E_new = resolveEndpoint(newEnd, 'end', parent, pzZoomFactor);
                     let nowInvalid = false;
                     if (newStart instanceof HTMLElement) {
-                        if (isPointInsideElement(E_new, newStart, parent)) nowInvalid = true;
+                        if (isPointInsideElement(E_new, newStart, parent, pzZoomFactor)) nowInvalid = true;
                     }
                     if (newEnd instanceof HTMLElement) {
-                        if (isPointInsideElement(S_new, newEnd, parent)) nowInvalid = true;
+                        if (isPointInsideElement(S_new, newEnd, parent, pzZoomFactor)) nowInvalid = true;
                     }
-                    const newRoute = computeRoute(S_new, E_new, gridSize, newStart, newEnd, parent);
+                    const newRoute = computeRoute(S_new, E_new, gridSize, newStart, newEnd, parent, pzZoomFactor);
                     if (!newRoute) nowInvalid = true;
                     const newBbox = computeBoundingBox(newRoute || [S_new, E_new], margin);
                     svg.style.left = newBbox.left + "px";
