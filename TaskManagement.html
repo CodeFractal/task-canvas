@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>GamePlan Canvas with Grid & Snap (Adjustable)</title>
+  <!-- Quill rich text editor styling -->
+  <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet" />
+  <link href="TaskManagement.css" rel="stylesheet" />
+</head>
+<body>
+  <!-- The canvas where tasks live -->
+  <div id="canvas"></div>
+  
+  <!-- Global context menu for canvas -->
+  <div id="contextMenu">
+    <div id="addTaskMenu">Add Task</div>
+  </div>
+  
+  <!-- Context menu for tasks -->
+  <div id="taskContextMenu">
+    <div id="deleteTaskMenu">Delete Task</div>
+    <div id="requiresDepMenu">Requires …</div>
+    <div id="requiredByDepMenu">Required by …</div>
+  </div>
+  
+  <!-- Context menu for dependencies -->
+  <div id="dependencyContextMenu">
+    <div id="deleteDependencyMenu">Delete Dependency</div>
+  </div>
+  
+  <!-- 3rd-party libraries -->
+  <!-- Panzoom for zooming and panning -->
+  <script src="https://cdn.jsdelivr.net/npm/@panzoom/panzoom/dist/panzoom.min.js"></script>
+  <!-- Interact.js for dragging -->
+  <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
+  <!-- Quill for rich text editing -->
+  <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
+  
+  <!-- Custom dependency arrow solution -->
+  <script src="DependencyArrow.js"></script>
+  
+  <script>
+    // Global state for tasks and dependencies
+    const tasks = {};
+    const dependencies = []; // each dependency: { from, to, arrow }
+    const undoStack = [];
+    const redoStack = [];
+    let taskIdCounter = 1;
+    let panzoomInstance;
+    
+    // Global state for dependency creation via ghost arrow
+    let dependencyCreationMode = null; // "source" or "target"
+    let dependencyCreationFixedTask = null; // fixed task id
+    let ghostArrow = null;
+    let ghostSnapTarget = null; // now stores the task id that the ghost arrow has snapped to
+    
+    // Create a new task at canvas coordinates (x,y)
+    function createTask(x, y) {
+      const taskId = 'task-' + taskIdCounter++;
+      const taskData = {
+        id: taskId,
+        title: 'New Task',
+        description: 'Description',
+        x: x,
+        y: y,
+        completed: false,
+        collapsed: false,
+      };
+      tasks[taskId] = taskData;
+      addTaskToCanvas(taskData);
+      pushUndo({ type: 'addTask', task: taskData });
+      autosave();
+    }
+    
+    // Build the task element (without a dependency button) and attach it to the canvas.
+    function addTaskToCanvas(taskData) {
+      const taskEl = document.createElement('div');
+      taskEl.classList.add('task');
+      taskEl.setAttribute('data-id', taskData.id);
+      taskEl.style.left = taskData.x + 'px';
+      taskEl.style.top = taskData.y + 'px';
+      taskEl.setAttribute('data-snapped', (taskData.x % 40 === 0 && taskData.y % 40 === 0) ? "true" : "false");
+      
+      const header = document.createElement('div');
+      header.classList.add('task-header');
+      
+      const toggle = document.createElement('div');
+      toggle.classList.add('toggle');
+      toggle.textContent = taskData.collapsed ? '+' : '-';
+      header.appendChild(toggle);
+      
+      const title = document.createElement('div');
+      title.classList.add('title');
+      title.textContent = taskData.title;
+      header.appendChild(title);
+      
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.classList.add('checkbox');
+      checkbox.checked = taskData.completed;
+      header.appendChild(checkbox);
+      
+      taskEl.appendChild(header);
+      
+      const description = document.createElement('div');
+      description.classList.add('description');
+      description.innerHTML = taskData.description;
+      taskEl.appendChild(description);
+      
+      title.addEventListener('click', (e) => {
+        e.stopPropagation();
+        makeTitleEditable(title, taskData);
+      });
+      description.addEventListener('click', (e) => {
+        e.stopPropagation();
+        makeDescriptionEditable(description, taskData);
+      });
+      checkbox.addEventListener('change', (e) => {
+        taskData.completed = checkbox.checked;
+        pushUndo({ type: 'toggleComplete', taskId: taskData.id, newValue: taskData.completed, oldValue: !taskData.completed });
+        autosave();
+      });
+      toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        taskData.collapsed = !taskData.collapsed;
+        description.style.display = taskData.collapsed ? 'none' : 'block';
+        toggle.textContent = taskData.collapsed ? '+' : '-';
+        pushUndo({ type: 'toggleCollapse', taskId: taskData.id, newValue: taskData.collapsed, oldValue: !taskData.collapsed });
+        autosave();
+      });
+      
+      // Right-click on a task brings up the task context menu.
+      taskEl.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        currentTaskTarget = taskData.id;
+        const taskContextMenu = document.getElementById('taskContextMenu');
+        taskContextMenu.style.display = 'block';
+        taskContextMenu.style.left = e.pageX + 'px';
+        taskContextMenu.style.top = e.pageY + 'px';
+      });
+      
+      // Make the task draggable with cumulative offset and grid snapping.
+      interact(taskEl).draggable({
+        listeners: {
+          start(event) {
+            event.stopPropagation();
+            taskEl.setAttribute('data-start-x', taskData.x);
+            taskEl.setAttribute('data-start-y', taskData.y);
+            taskEl.setAttribute('data-cumdx', 0);
+            taskEl.setAttribute('data-cumdy', 0);
+          },
+          move(event) {
+            event.stopPropagation();
+            let cumdx = parseFloat(taskEl.getAttribute('data-cumdx')) || 0;
+            let cumdy = parseFloat(taskEl.getAttribute('data-cumdy')) || 0;
+            cumdx += event.dx;
+            cumdy += event.dy;
+            taskEl.setAttribute('data-cumdx', cumdx);
+            taskEl.setAttribute('data-cumdy', cumdy);
+            let startX = parseFloat(taskEl.getAttribute('data-start-x'));
+            let startY = parseFloat(taskEl.getAttribute('data-start-y'));
+            let absX = startX + cumdx;
+            let absY = startY + cumdy;
+            let gridX = Math.round(absX / 40) * 40;
+            let gridY = Math.round(absY / 40) * 40;
+            let newDx = cumdx;
+            let newDy = cumdy;
+            if (Math.abs(absX - gridX) <= 5) {
+              newDx = gridX - startX;
+              taskEl.setAttribute('data-snapped', "true");
+            } else {
+              taskEl.setAttribute('data-snapped', "false");
+            }
+            if (Math.abs(absY - gridY) <= 5) {
+              newDy = gridY - startY;
+              taskEl.setAttribute('data-snapped', "true");
+            } else {
+              taskEl.setAttribute('data-snapped', "false");
+            }
+            taskEl.style.transform = `translate(${newDx}px, ${newDy}px)`;
+            updateTaskDependencies(taskData.id);
+          },
+          end(event) {
+            event.stopPropagation();
+            let cumdx = parseFloat(taskEl.getAttribute('data-cumdx')) || 0;
+            let cumdy = parseFloat(taskEl.getAttribute('data-cumdy')) || 0;
+            let startX = parseFloat(taskEl.getAttribute('data-start-x'));
+            let startY = parseFloat(taskEl.getAttribute('data-start-y'));
+            let absX = startX + cumdx;
+            let absY = startY + cumdy;
+            let gridX = Math.round(absX / 40) * 40;
+            let gridY = Math.round(absY / 40) * 40;
+            if (Math.abs(absX - gridX) <= 5) {
+              absX = gridX;
+            }
+            if (Math.abs(absY - gridY) <= 5) {
+              absY = gridY;
+            }
+            taskData.x = absX;
+            taskData.y = absY;
+            taskEl.style.left = taskData.x + 'px';
+            taskEl.style.top = taskData.y + 'px';
+            taskEl.style.transform = 'none';
+            taskEl.removeAttribute('data-cumdx');
+            taskEl.removeAttribute('data-cumdy');
+            taskEl.removeAttribute('data-start-x');
+            taskEl.removeAttribute('data-start-y');
+            taskEl.setAttribute('data-snapped', (taskData.x % 40 === 0 && taskData.y % 40 === 0) ? "true" : "false");
+            pushUndo({ type: 'moveTask', taskId: taskData.id, newX: taskData.x, newY: taskData.y });
+            autosave();
+          }
+        }
+      });
+      
+      document.getElementById('canvas').appendChild(taskEl);
+    }
+    
+    function makeTitleEditable(titleEl, taskData) {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = taskData.title;
+      input.style.width = '100%';
+      titleEl.replaceWith(input);
+      input.focus();
+      input.addEventListener('blur', () => {
+        const oldValue = taskData.title;
+        taskData.title = input.value || 'Untitled';
+        const newTitleEl = document.createElement('div');
+        newTitleEl.classList.add('title');
+        newTitleEl.textContent = taskData.title;
+        input.replaceWith(newTitleEl);
+        newTitleEl.addEventListener('click', (e) => {
+          e.stopPropagation();
+          makeTitleEditable(newTitleEl, taskData);
+        });
+        pushUndo({ type: 'editTask', taskId: taskData.id, field: 'title', newValue: taskData.title, oldValue });
+        autosave();
+      });
+    }
+    
+    function makeDescriptionEditable(descEl, taskData) {
+      const originalDesc = descEl;
+      const editorContainer = document.createElement('div');
+      const editorElement = document.createElement('div');
+      editorContainer.appendChild(editorElement);
+      editorContainer.classList.add('editor-container');
+      editorContainer.style.minHeight = '50px';
+      originalDesc.parentNode.replaceChild(editorContainer, originalDesc);
+      
+      const quill = new Quill(editorElement, {
+        theme: 'snow',
+        modules: {
+          toolbar: [
+            ['bold', 'italic', 'underline', 'strike'],
+            [{ 'header': 1 }, { 'header': 2 }],
+            [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+            [{ 'indent': '-1' }, { 'indent': '+1' }],
+            [{ 'color': [] }, { 'background': [] }],
+            [{ 'align': [] }],
+            ['clean']
+          ]
+        }
+      });
+      quill.root.innerHTML = taskData.description;
+      quill.focus();
+      setTimeout(() => quill.setSelection(quill.getLength(), 0), 0);
+      
+      function adjustHeight() {
+        const newHeight = quill.root.scrollHeight;
+        editorElement.style.height = newHeight + 'px';
+      }
+      quill.on('text-change', adjustHeight);
+      adjustHeight();
+      
+      function saveAndCleanup() {
+        const oldValue = taskData.description;
+        taskData.description = quill.root.innerHTML;
+        const newDescEl = document.createElement('div');
+        newDescEl.classList.add('description');
+        newDescEl.innerHTML = taskData.description;
+        newDescEl.addEventListener('click', (e) => {
+          e.stopPropagation();
+          makeDescriptionEditable(newDescEl, taskData);
+        });
+        editorContainer.parentNode.replaceChild(newDescEl, editorContainer);
+        pushUndo({ type: 'editTask', taskId: taskData.id, field: 'description', newValue: taskData.description, oldValue });
+        autosave();
+        document.removeEventListener('click', clickOutsideListener);
+      }
+      
+      function clickOutsideListener(e) {
+        if (!editorContainer.contains(e.target)) {
+          saveAndCleanup();
+        }
+      }
+      document.addEventListener('click', clickOutsideListener);
+    }
+    
+    // Confirm dependency creation (called when ghost arrow is accepted).
+    function addDependency(fromId, toId, skipUndo = false) {
+        if (dependencies.find(dep => dep.from === fromId && dep.to === toId)) return;
+        const canvas = document.getElementById('canvas');
+        const fromEl = document.querySelector(`.task[data-id="${fromId}"]`);
+        const toEl = document.querySelector(`.task[data-id="${toId}"]`);
+        if (!fromEl || !toEl) return;
+        // Instead of passing raw coordinates, pass the elements.
+        const arrow = DependencyArrow.createArrow(canvas, fromEl, toEl, { color: "white" });
+        // Instead of arrow.line.addEventListener, use arrow.addEventListener.
+        arrow.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        currentDependencyTarget = { from: fromId, to: toId, arrow: arrow };
+        const depContextMenu = document.getElementById('dependencyContextMenu');
+        depContextMenu.style.display = 'block';
+        depContextMenu.style.left = e.pageX + 'px';
+        depContextMenu.style.top = e.pageY + 'px';
+        });
+        dependencies.push({ from: fromId, to: toId, arrow: arrow });
+        if (!skipUndo) {
+            pushUndo({ type: 'addDependency', from: fromId, to: toId });
+        }
+        autosave();
+    }
+    
+    function updateTaskDependencies(taskId) {
+      dependencies.forEach(dep => {
+        if (dep.from === taskId || dep.to === taskId) {
+          const canvas = document.getElementById('canvas');
+          const fromEl = document.querySelector(`.task[data-id="${dep.from}"]`);
+          const toEl = document.querySelector(`.task[data-id="${dep.to}"]`);
+          if (!fromEl || !toEl) return;
+          dep.arrow.update(fromEl, toEl);
+        }
+      });
+    }
+    
+    function pushUndo(action) {
+      undoStack.push(action);
+      redoStack.length = 0;
+    }
+    
+    function undo() {
+      const action = undoStack.pop();
+      if (!action) return;
+      switch (action.type) {
+        case 'addTask':
+          removeTask(action.task.id, true);
+          break;
+        case 'removeTask':
+          tasks[action.task.id] = action.task;
+          addTaskToCanvas(action.task);
+          action.dependencies.forEach(dep => {
+            addDependency(dep.from, dep.to, true);
+          });
+          break;
+        case 'editTask': {
+          const task = tasks[action.taskId];
+          if (task) {
+            task[action.field] = action.oldValue;
+            const taskEl = document.querySelector(`.task[data-id="${action.taskId}"]`);
+            if (action.field === 'title') {
+              taskEl.querySelector('.title').textContent = action.oldValue;
+            } else if (action.field === 'description') {
+              taskEl.querySelector('.description').innerHTML = action.oldValue;
+            }
+          }
+          break;
+        }
+        case 'toggleComplete': {
+          const t = tasks[action.taskId];
+          if (t) {
+            t.completed = action.oldValue;
+            const taskEl = document.querySelector(`.task[data-id="${action.taskId}"]`);
+            taskEl.querySelector('.checkbox').checked = action.oldValue;
+          }
+          break;
+        }
+        case 'toggleCollapse': {
+          const task = tasks[action.taskId];
+          if (task) {
+            task.collapsed = action.oldValue;
+            const taskEl = document.querySelector(`.task[data-id="${action.taskId}"]`);
+            taskEl.querySelector('.description').style.display = action.oldValue ? 'none' : 'block';
+            taskEl.querySelector('.toggle').textContent = action.oldValue ? '+' : '-';
+          }
+          break;
+        }
+        case 'addDependency':
+          removeDependency(action.from, action.to, true);
+          break;
+        case 'removeDependency':
+          addDependency(action.from, action.to, true);
+          break;
+      }
+      redoStack.push(action);
+      autosave();
+    }
+    
+    function redo() {
+      const action = redoStack.pop();
+      if (!action) return;
+      switch (action.type) {
+        case 'addTask':
+          tasks[action.task.id] = action.task;
+          addTaskToCanvas(action.task);
+          break;
+        case 'removeTask':
+          removeTask(action.task.id, true);
+          break;
+        case 'editTask': {
+          const task = tasks[action.taskId];
+          if (task) {
+            task[action.field] = action.newValue;
+            const taskEl = document.querySelector(`.task[data-id="${action.taskId}"]`);
+            if (action.field === 'title') {
+              taskEl.querySelector('.title').textContent = action.newValue;
+            } else if (action.field === 'description') {
+              taskEl.querySelector('.description').innerHTML = action.newValue;
+            }
+          }
+          break;
+        }
+        case 'toggleComplete': {
+          const t = tasks[action.taskId];
+          if (t) {
+            t.completed = action.newValue;
+            const taskEl = document.querySelector(`.task[data-id="${action.taskId}"]`);
+            taskEl.querySelector('.checkbox').checked = action.newValue;
+          }
+          break;
+        }
+        case 'toggleCollapse': {
+          const task = tasks[action.taskId];
+          if (task) {
+            task.collapsed = action.newValue;
+            const taskEl = document.querySelector(`.task[data-id="${action.taskId}"]`);
+            taskEl.querySelector('.description').style.display = action.newValue ? 'none' : 'block';
+            taskEl.querySelector('.toggle').textContent = action.newValue ? '+' : '-';
+          }
+          break;
+        }
+        case 'addDependency':
+          addDependency(action.from, action.to, true);
+          break;
+        case 'removeDependency':
+          removeDependency(action.from, action.to, true);
+          break;
+      }
+      undoStack.push(action);
+      autosave();
+    }
+    
+    function removeTask(taskId, skipUndo) {
+      const taskData = tasks[taskId];
+      if (!taskData) return;
+      let removedDeps = [];
+      for (let i = dependencies.length - 1; i >= 0; i--) {
+        if (dependencies[i].from === taskId || dependencies[i].to === taskId) {
+          removedDeps.push({ from: dependencies[i].from, to: dependencies[i].to });
+          dependencies[i].arrow.remove();
+          dependencies.splice(i, 1);
+        }
+      }
+      const taskEl = document.querySelector(`.task[data-id="${taskId}"]`);
+      if (taskEl) taskEl.remove();
+      delete tasks[taskId];
+      if (!skipUndo) pushUndo({ type: 'removeTask', task: taskData, dependencies: removedDeps });
+      autosave();
+    }
+    
+    function removeDependency(fromId, toId, skipUndo) {
+      const index = dependencies.findIndex(dep => dep.from === fromId && dep.to === toId);
+      if (index >= 0) {
+        dependencies[index].arrow.remove();
+        dependencies.splice(index, 1);
+        if (!skipUndo) pushUndo({ type: 'removeDependency', from: fromId, to: toId });
+        autosave();
+      }
+    }
+    
+    function autosave() {
+      console.log("Autosaved", { tasks, dependencies });
+    }
+    
+    // Global variables to track right-click targets.
+    let currentTaskTarget = null;
+    let currentDependencyTarget = null;
+    
+    // Dependency creation via ghost arrow.
+    document.addEventListener('DOMContentLoaded', () => {
+      const canvas = document.getElementById('canvas');
+      panzoomInstance = Panzoom(canvas, {
+        maxScale: 5,
+        minScale: 0.5,
+        contain: false,
+        excludeClass: 'task'
+      });
+      canvas.parentElement.addEventListener('wheel', panzoomInstance.zoomWithWheel);
+      
+      canvas.addEventListener('dblclick', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const scale = panzoomInstance.getScale();
+        const x = (e.clientX - rect.left) / scale;
+        const y = (e.clientY - rect.top) / scale;
+        createTask(x, y);
+      });
+      
+      canvas.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        const contextMenu = document.getElementById('contextMenu');
+        contextMenu.style.display = 'block';
+        contextMenu.style.left = e.pageX + 'px';
+        contextMenu.style.top = e.pageY + 'px';
+      });
+      
+      document.addEventListener('click', () => {
+        document.getElementById('contextMenu').style.display = 'none';
+        document.getElementById('taskContextMenu').style.display = 'none';
+        document.getElementById('dependencyContextMenu').style.display = 'none';
+      });
+      
+      document.getElementById('addTaskMenu').addEventListener('click', () => {
+        const contextMenu = document.getElementById('contextMenu');
+        const rect = canvas.getBoundingClientRect();
+        const scale = panzoomInstance.getScale();
+        const x = (parseInt(contextMenu.style.left) - rect.left) / scale;
+        const y = (parseInt(contextMenu.style.top) - rect.top) / scale;
+        createTask(x, y);
+      });
+      
+      document.getElementById('deleteTaskMenu').addEventListener('click', () => {
+        if (currentTaskTarget) {
+          removeTask(currentTaskTarget);
+          currentTaskTarget = null;
+        }
+        document.getElementById('taskContextMenu').style.display = 'none';
+      });
+      
+      document.getElementById('deleteDependencyMenu').addEventListener('click', () => {
+        if (currentDependencyTarget) {
+          removeDependency(currentDependencyTarget.from, currentDependencyTarget.to);
+          currentDependencyTarget = null;
+        }
+        document.getElementById('dependencyContextMenu').style.display = 'none';
+      });
+      
+      // Initiate dependency creation:
+      // "Requires ..." means the fixed task is the source.
+      document.getElementById('requiresDepMenu').addEventListener('click', () => {
+          dependencyCreationMode = "source";
+          dependencyCreationFixedTask = currentTaskTarget; // fixed source
+          ghostSnapTarget = null;
+          const canvasRect = document.getElementById('canvas').getBoundingClientRect();
+          const taskEl = document.querySelector(`.task[data-id="${dependencyCreationFixedTask}"]`);
+          const rect = taskEl.getBoundingClientRect();
+          const fixedPoint = { x: rect.left + rect.width/2 - canvasRect.left, y: rect.top + rect.height/2 - canvasRect.top };
+          // For "Requires", pass the fixed element as the start.
+          ghostArrow = DependencyArrow.createArrow(document.getElementById('canvas'), taskEl, fixedPoint, { color: "white" });
+          // Set ghost appearance
+          ghostArrow.setColor("rgba(255,255,255,0.5)");
+          document.getElementById('taskContextMenu').style.display = 'none';
+      });
+      
+      // "Required by ..." means the fixed task is the target.
+      document.getElementById('requiredByDepMenu').addEventListener('click', () => {
+        dependencyCreationMode = "target";
+        dependencyCreationFixedTask = currentTaskTarget; // fixed target
+        ghostSnapTarget = null;
+        const canvasRect = document.getElementById('canvas').getBoundingClientRect();
+        const taskEl = document.querySelector(`.task[data-id="${dependencyCreationFixedTask}"]`);
+        const rect = taskEl.getBoundingClientRect();
+        const fixedPoint = { x: rect.left + rect.width/2 - canvasRect.left, y: rect.top + rect.height/2 - canvasRect.top };
+        // For "Required by", pass the fixed element as the end.
+        ghostArrow = DependencyArrow.createArrow(document.getElementById('canvas'), fixedPoint, taskEl, { color: "white" });
+        ghostArrow.setColor("rgba(255,255,255,0.5)");
+        document.getElementById('taskContextMenu').style.display = 'none';
+      });
+      
+      // Update ghost arrow on mousemove while in dependency creation mode.
+      document.addEventListener('mousemove', (e) => {
+        if (dependencyCreationMode) {
+          const canvasRect = document.getElementById('canvas').getBoundingClientRect();
+          const mousePos = { x: e.clientX - canvasRect.left, y: e.clientY - canvasRect.top };
+          let snapPoint = null;
+          const elem = document.elementFromPoint(e.clientX, e.clientY);
+          if (elem) {
+            const taskElem = elem.closest('.task');
+            if (taskElem) {
+              const taskId = taskElem.getAttribute('data-id');
+              if (taskId && taskId !== dependencyCreationFixedTask) {
+                const rect = taskElem.getBoundingClientRect();
+                snapPoint = { x: rect.left + rect.width/2 - canvasRect.left, y: rect.top + rect.height/2 - canvasRect.top };
+                ghostSnapTarget = taskId;
+              } else {
+                ghostSnapTarget = null;
+              }
+            } else {
+              ghostSnapTarget = null;
+            }
+          } else {
+            ghostSnapTarget = null;
+          }
+          if (dependencyCreationMode === "source") {
+            const fixedEl = document.querySelector(`.task[data-id="${dependencyCreationFixedTask}"]`);
+            if (ghostSnapTarget) {
+              const targetEl = document.querySelector(`.task[data-id="${ghostSnapTarget}"]`);
+              ghostArrow.update(fixedEl, targetEl);
+            } else {
+              ghostArrow.update(fixedEl, mousePos);
+            }
+          } else if (dependencyCreationMode === "target") {
+            const fixedEl = document.querySelector(`.task[data-id="${dependencyCreationFixedTask}"]`);
+            if (ghostSnapTarget) {
+              const sourceEl = document.querySelector(`.task[data-id="${ghostSnapTarget}"]`);
+              ghostArrow.update(sourceEl, fixedEl);
+            } else {
+              ghostArrow.update(mousePos, fixedEl);
+            }
+          }
+        }
+      });
+      
+      // On left-click while in dependency creation mode, confirm if snapped; otherwise cancel.
+      document.addEventListener('mousedown', (e) => {
+        if (dependencyCreationMode && e.button === 0) {
+          if (ghostSnapTarget) {
+            if (dependencyCreationMode === "source") {
+              addDependency(dependencyCreationFixedTask, ghostSnapTarget);
+            } else if (dependencyCreationMode === "target") {
+              addDependency(ghostSnapTarget, dependencyCreationFixedTask);
+            }
+          }
+          if (ghostArrow) {
+            ghostArrow.remove();
+            ghostArrow = null;
+          }
+          dependencyCreationMode = null;
+          dependencyCreationFixedTask = null;
+          ghostSnapTarget = null;
+        }
+      });
+      
+      // Cancel dependency creation on Escape key or right-click.
+      document.addEventListener('keydown', (e) => {
+        if (dependencyCreationMode && e.key === "Escape") {
+          if (ghostArrow) {
+            ghostArrow.remove();
+            ghostArrow = null;
+          }
+          dependencyCreationMode = null;
+          dependencyCreationFixedTask = null;
+          ghostSnapTarget = null;
+        }
+      });
+      document.addEventListener('contextmenu', (e) => {
+        if (dependencyCreationMode) {
+          if (ghostArrow) {
+            ghostArrow.remove();
+            ghostArrow = null;
+          }
+          dependencyCreationMode = null;
+          dependencyCreationFixedTask = null;
+          ghostSnapTarget = null;
+        }
+      });
+      
+      // Existing keydown for undo/redo.
+      document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && !e.shiftKey && e.key === 'z') {
+          e.preventDefault();
+          undo();
+        }
+        if (e.ctrlKey && e.shiftKey && (e.key === 'Z' || e.key === 'z')) {
+          e.preventDefault();
+          redo();
+        }
+      });
+    });
+  </script>
+</body>
+</html>
