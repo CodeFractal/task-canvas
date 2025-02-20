@@ -3,7 +3,7 @@ body {
     overflow: hidden;
     background: #121212;
     color: #fff;
-    font-family: sans-serif;
+    font-family: "Helvetica";
     font-size: 12px;
 }
 
@@ -43,7 +43,7 @@ body {
     align-items: center;
     justify-content: space-between;
     color: #ccc;
-    font-size: 14px;
+    font-size: 12px;
     height: 40px;
     padding: 0 10px;
 }
@@ -51,8 +51,9 @@ body {
 .task-header > input[type="text"] {
     background: none;
     border: none;
-    color: #fff;
-    font-size: 14px;
+    color: #ccc;
+    text-align: center;
+    font-size: 12px;
     width: 100%;
     outline: none;
 }
@@ -100,8 +101,8 @@ body {
 
 .description,
 .ql-editor {
-    font-size: 14px;
     background-color: #1a1a1a;
+    font-size: 12px;
     padding: 10px 15px 10px 15px;
 }
     .description p,
