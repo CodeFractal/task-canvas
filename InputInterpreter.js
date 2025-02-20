@@ -2,99 +2,100 @@
    This module virtualizes raw mouse events into single, interpreted ("virtual") events.
    It exposes a single object: InputInterpreter.
    Changes:
-   - Separately tracks left- and right-button drag state so that mousedown events are delayed until
-     a drag is detected, and right-clicks without drag yield a virtual contextmenu.
+   - Separately tracks left- and right-button drag state with individual mouse down events.
+   - Delays mousedown until drag is detected; right-clicks without drag yield a virtual contextmenu.
    - Virtual events now include valid pageX/pageY properties.
+   - Improved reliability with defensive coding and a destroy method for cleanup.
 */
 const InputInterpreter = (function () {
     let callback = null;
-    let lastMouseDownEvent = null;
+    let leftMouseDownEvent = null;
+    let rightMouseDownEvent = null;
     let lastClickData = null;
     let leftDragStarted = false;
     let rightDragStarted = false;
     const dragThreshold = 5;      // pixels movement to start a drag
     const dblClickDelay = 200;    // ms delay to detect a double-click
+    let listenersAdded = false;
 
-    function init(cb) {
-        callback = cb;
-        document.addEventListener('mousedown', onMouseDown);
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', onMouseUp);
-    }
-
+    // Called when a mouse button is pressed.
     function onMouseDown(e) {
-        lastMouseDownEvent = e;
         if (e.button === 0) {
+            leftMouseDownEvent = e;
             leftDragStarted = false;
         } else if (e.button === 2) {
+            rightMouseDownEvent = e;
             rightDragStarted = false;
         }
         // Do not immediately emit mousedown; wait for movement threshold.
     }
 
+    // Called when the mouse moves.
     function onMouseMove(e) {
-        const veMove = createVirtualEvent('mousemove', e);
-        if (callback) callback(veMove);
+        // Always emit a virtual mousemove event.
+        safeCallback(createVirtualEvent('mousemove', e));
 
-        if (lastMouseDownEvent) {
-            const dx = e.clientX - lastMouseDownEvent.clientX;
-            const dy = e.clientY - lastMouseDownEvent.clientY;
+        // Check for left-button drag start.
+        if (leftMouseDownEvent && !leftDragStarted) {
+            const dx = e.clientX - leftMouseDownEvent.clientX;
+            const dy = e.clientY - leftMouseDownEvent.clientY;
             const distance = Math.sqrt(dx * dx + dy * dy);
-            if (lastMouseDownEvent.button === 0 && !leftDragStarted && distance > dragThreshold) {
+            if (distance > dragThreshold) {
                 leftDragStarted = true;
-                const veDown = createVirtualEvent('mousedown', lastMouseDownEvent);
-                if (callback) callback(veDown);
+                safeCallback(createVirtualEvent('mousedown', leftMouseDownEvent));
             }
-            if (lastMouseDownEvent.button === 2 && !rightDragStarted && distance > dragThreshold) {
+        }
+
+        // Check for right-button drag start.
+        if (rightMouseDownEvent && !rightDragStarted) {
+            const dx = e.clientX - rightMouseDownEvent.clientX;
+            const dy = e.clientY - rightMouseDownEvent.clientY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            if (distance > dragThreshold) {
                 rightDragStarted = true;
-                const veDown = createVirtualEvent('mousedown', lastMouseDownEvent);
-                if (callback) callback(veDown);
+                safeCallback(createVirtualEvent('mousedown', rightMouseDownEvent));
             }
         }
     }
 
+    // Called when a mouse button is released.
     function onMouseUp(e) {
         const now = Date.now();
         if (e.button === 0) {
             if (leftDragStarted) {
-                const veUp = createVirtualEvent('mouseup', e);
-                if (callback) callback(veUp);
-                lastMouseDownEvent = null;
-                return;
-            }
-            // Minimal movement click.
-            if (lastClickData && (now - lastClickData.time < dblClickDelay)) {
-                const ve = createVirtualEvent('dblclick', e);
-                if (callback) callback(ve);
-                lastClickData = null;
+                safeCallback(createVirtualEvent('mouseup', e));
             } else {
-                lastClickData = { event: e, time: now };
-                setTimeout(() => {
-                    if (lastClickData && (Date.now() - lastClickData.time >= dblClickDelay)) {
-                        const ve = createVirtualEvent('click', e);
-                        if (callback) callback(ve);
-                        lastClickData = null;
-                    }
-                }, dblClickDelay);
+                // Handle minimal movement click with potential double-click detection.
+                if (lastClickData && (now - lastClickData.time < dblClickDelay)) {
+                    safeCallback(createVirtualEvent('dblclick', e));
+                    lastClickData = null;
+                } else {
+                    lastClickData = { event: e, time: now };
+                    setTimeout(() => {
+                        if (lastClickData && (Date.now() - lastClickData.time >= dblClickDelay)) {
+                            safeCallback(createVirtualEvent('click', e));
+                            lastClickData = null;
+                        }
+                    }, dblClickDelay);
+                }
             }
+            leftMouseDownEvent = null;
+            leftDragStarted = false;
         } else if (e.button === 2) {
             if (rightDragStarted) {
-                const veUp = createVirtualEvent('mouseup', e);
-                if (callback) callback(veUp);
+                safeCallback(createVirtualEvent('mouseup', e));
             } else {
                 // If right button did not drag, treat as a contextmenu.
-                const ve = createVirtualEvent('contextmenu', e);
-                if (callback) callback(ve);
+                safeCallback(createVirtualEvent('contextmenu', e));
             }
+            rightMouseDownEvent = null;
+            rightDragStarted = false;
         } else {
-            const ve = createVirtualEvent('mouseup', e);
-            if (callback) callback(ve);
+            safeCallback(createVirtualEvent('mouseup', e));
         }
-        lastMouseDownEvent = null;
-        leftDragStarted = false;
-        rightDragStarted = false;
     }
 
+    // Constructs a virtual event with extended properties.
     function createVirtualEvent(type, originalEvent) {
         return {
             type: type,
@@ -108,7 +109,50 @@ const InputInterpreter = (function () {
         };
     }
 
+    // Safely invokes the callback to catch errors without disrupting event processing.
+    function safeCallback(ve) {
+        if (typeof callback === 'function') {
+            try {
+                callback(ve);
+            } catch (error) {
+                console.error('InputInterpreter callback error:', error);
+            }
+        }
+    }
+
+    // Initializes the interpreter with a callback.
+    function init(cb) {
+        if (typeof cb !== 'function') {
+            throw new Error('InputInterpreter.init requires a callback function');
+        }
+        callback = cb;
+        if (!listenersAdded) {
+            document.addEventListener('mousedown', onMouseDown);
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+            listenersAdded = true;
+        }
+    }
+
+    // Cleans up event listeners and resets internal state.
+    function destroy() {
+        if (listenersAdded) {
+            document.removeEventListener('mousedown', onMouseDown);
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+            listenersAdded = false;
+        }
+        callback = null;
+        leftMouseDownEvent = null;
+        rightMouseDownEvent = null;
+        lastClickData = null;
+        leftDragStarted = false;
+        rightDragStarted = false;
+    }
+
+    // Expose the public API. (Existing usage remains unchanged.)
     return {
-        init: init
+        init: init,
+        destroy: destroy
     };
 })();
