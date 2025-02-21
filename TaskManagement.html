@@ -6,6 +6,12 @@
   <!-- Quill rich text editor styling -->
   <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet" />
   <link href="TaskManagement.css" rel="stylesheet" />
+  <style>
+    /* Highlight selected tasks with a light blue outline */
+    .task.selected {
+      outline: 2px solid lightblue;
+    }
+  </style>
 </head>
 <body>
   <!-- The canvas where tasks live -->
@@ -59,14 +65,18 @@
     const redoStack = [];
     let taskIdCounter = 1;
     
+    // New selection & multi-drag state
+    const selectedTasks = new Set();
+    let currentGroupDrag = null;  // { startMouseX, startMouseY, originalPositions: { taskId: {x,y} } }
+    let currentDrag = null;       // For single-task drag (if the task isn't already selected)
+    let areaSelect = null;        // { startX, startY, currentX, currentY, element }
+    
     // Dependency creation state
     let dependencyCreationMode = null; // "source" or "target"
     let dependencyCreationFixedTask = null; // fixed task id
     let ghostArrow = null;
     let ghostSnapTarget = null;  // the task id that the ghost arrow is snapping to
     
-    // Dragging state for tasks
-    let currentDrag = null;  // { taskId, startMouseX, startMouseY, origX, origY }
     // Dragging state for background panning (using right mouse button)
     let currentPan = null;   // { startMouseX, startMouseY, origTranslateX, origTranslateY }
     
@@ -170,20 +180,35 @@
           ghostSnapTarget = null;
           return;
         }
+        return; // Don't take any other actions in dependency creation mode.
       }
       
-      // --- Dragging Handling for Tasks and Background Panning ---
-      if (!dependencyCreationMode) {
-        // Handle mousedown events.
-        if (e.type === 'mousedown') {
-          if (e.button === 0) {
-            // Left button on a task header: start task drag.
-            const headerElem = e.target.closest('.task-header');
-            // But prevent dragging if the target is inside the title input field.
-            if (headerElem && !e.target.matches('input[type="text"]')) {
-              const taskElem = headerElem.closest('.task');
-              if (taskElem) {
-                const taskId = taskElem.getAttribute('data-id');
+      if (e.type === 'mousedown') {
+
+        // LMB down
+        if (e.button === 0) {
+          // LMB down on task header: begin dragging task(s)
+          const taskHeader = e.target.closest('.task-header');
+          if (taskHeader) {
+            if (!e.target.matches('input[type="text"]')) {
+              const taskElem = taskHeader.closest('.task');
+              const taskId = taskElem.getAttribute('data-id');
+
+              // If the task being dragged is part of the selection, start group drag.
+              if (selectedTasks.has(taskId)) {
+                currentGroupDrag = {
+                  startMouseX: ControlState.mouseX,
+                  startMouseY: ControlState.mouseY,
+                  originalPositions: {}
+                };
+                selectedTasks.forEach(tid => {
+                  currentGroupDrag.originalPositions[tid] = { x: tasks[tid].x, y: tasks[tid].y };
+                });
+              }
+
+              // If the task is not part of the selection, clear selection and start single task drag.
+              else {
+                clearSelection();
                 currentDrag = {
                   taskId: taskId,
                   startMouseX: ControlState.mouseX,
@@ -192,23 +217,75 @@
                   origY: tasks[taskId].y
                 };
               }
+              
+              return; // Dragging started, no further processing needed.
             }
-          } else if (e.button === 2) {
-            // Right button: start background pan.
-            currentPan = {
-              startMouseX: ControlState.mouseX,
-              startMouseY: ControlState.mouseY,
-              origTranslateX: CustomPanZoom.getTranslateX(),
-              origTranslateY: CustomPanZoom.getTranslateY()
-            };
-            document.getElementById('canvas').style.cursor = 'grabbing';
           }
-          return; // Do not process further in mousedown.
+
+          // LMB down on canvas: begin area selection.
+          else if (!e.target.closest('.task')) {
+            // Clear selection if Shift is not pressed.
+            if (!ControlState.keys['Shift']) {              
+              clearSelection();
+            }
+            areaSelect = {
+              startX: ControlState.mouseX,
+              startY: ControlState.mouseY,
+              currentX: ControlState.mouseX,
+              currentY: ControlState.mouseY,
+              element: createSelectionRectElement()
+            };
+            document.getElementById('canvas').appendChild(areaSelect.element);
+          }
+
         }
         
-        // Handle mousemove events.
-        if (e.type === 'mousemove' && ControlState.leftPressed) {
-          // Left-button dragging for tasks.
+        // RMB down: start canvas panning.
+        else if (e.button === 2) {
+          currentPan = {
+            startMouseX: ControlState.mouseX,
+            startMouseY: ControlState.mouseY,
+            origTranslateX: CustomPanZoom.getTranslateX(),
+            origTranslateY: CustomPanZoom.getTranslateY()
+          };
+          document.getElementById('canvas').style.cursor = 'grabbing';
+        }
+
+        return; // End of mousedown handling.
+      }
+      
+      if (e.type === 'mousemove') {
+
+        // LMB drag
+        if (ControlState.leftPressed) {
+
+          // If we're in group drag mode, move all selected tasks together.
+          if (currentGroupDrag) {
+            // Move all selected tasks together.
+            const deltaX = ControlState.mouseX - currentGroupDrag.startMouseX;
+            const deltaY = ControlState.mouseY - currentGroupDrag.startMouseY;
+            selectedTasks.forEach(tid => {
+              const orig = currentGroupDrag.originalPositions[tid];
+              let newX = orig.x + deltaX;
+              let newY = orig.y + deltaY;
+              // Apply grid snapping.
+              const gridX = Math.round(newX / 40) * 40;
+              const gridY = Math.round(newY / 40) * 40;
+              if (Math.abs(newX - gridX) <= 5) newX = gridX;
+              if (Math.abs(newY - gridY) <= 5) newY = gridY;
+              const taskEl = document.querySelector(`.task[data-id="${tid}"]`);
+              if (taskEl) {
+                taskEl.style.left = newX + 'px';
+                taskEl.style.top = newY + 'px';
+              }
+              tasks[tid].x = newX;
+              tasks[tid].y = newY;
+              updateTaskDependencies(tid);
+            });
+            return;
+          }
+
+          // If we're in single-task drag mode, move the task.
           if (currentDrag) {
             const deltaX = ControlState.mouseX - currentDrag.startMouseX;
             const deltaY = ControlState.mouseY - currentDrag.startMouseY;
@@ -223,14 +300,26 @@
             if (taskEl) {
               taskEl.style.left = newX + 'px';
               taskEl.style.top = newY + 'px';
-              tasks[currentDrag.taskId].x = newX;
-              tasks[currentDrag.taskId].y = newY;
-              updateTaskDependencies(currentDrag.taskId);
             }
+            tasks[currentDrag.taskId].x = newX;
+            tasks[currentDrag.taskId].y = newY;
+            updateTaskDependencies(currentDrag.taskId);
             return;
           }
+
+          // If we're in area selection mode, update the selection rectangle.
+          if (areaSelect) {
+            // Update the selection rectangle.
+            areaSelect.currentX = ControlState.mouseX;
+            areaSelect.currentY = ControlState.mouseY;
+            updateSelectionRectElement(areaSelect);
+            return;
+          }
+
         }
-        if (e.type === 'mousemove' && ControlState.rightPressed) {
+        
+        // RMB drag: pan the canvas.
+        if (ControlState.rightPressed) {
           // Right-button dragging for background panning.
           if (currentPan) {
             const deltaX = ControlState.mouseX - currentPan.startMouseX;
@@ -241,30 +330,81 @@
             return;
           }
         }
-        
-        // Handle mouseup events.
-        if (e.type === 'mouseup') {
-          if (e.button === 0) {
-            if (currentDrag) {
-              currentDrag = null;
-              autosave();
-              return;
-            }
-          }
-          if (e.button === 2) {
-            if (currentPan) {
-              currentPan = null;
-              document.getElementById('canvas').style.cursor = 'default';
-              return;
-            }
-          }
-        }
+
+        return; // End of mousemove handling.
       }
       
-      // --- UI Control Handling ---
-      if (dependencyCreationMode) return;
+      if (e.type === 'mouseup') {
+
+        // LMB Release
+        if (e.button === 0) {
+
+          // If we were in group drag mode, finalize the drag.
+          if (currentGroupDrag) {
+            currentGroupDrag = null;
+            autosave();
+            return;
+          }
+
+          // If we were in single-task drag mode, finalize the drag.
+          if (currentDrag) {
+            currentDrag = null;
+            autosave();
+            return;
+          }
+
+          // If we were in area selection mode, finalize the selection.
+          if (areaSelect) {
+            // Finalize area selection.
+            const rect = getSelectionRect(areaSelect);
+
+            // If Shift is not pressed, clear the selection first.
+            if (!ControlState.keys['Shift']) {
+              clearSelection();
+            }
+            
+            const taskElements = document.querySelectorAll('.task');
+            taskElements.forEach(taskEl => {
+              const canvasRect = document.getElementById('canvas').getBoundingClientRect();
+              const taskRect = taskEl.getBoundingClientRect();
+              // Calculate task position relative to the canvas.
+              const taskX = taskRect.left - canvasRect.left;
+              const taskY = taskRect.top - canvasRect.top;
+              const taskWidth = taskRect.width;
+              const taskHeight = taskRect.height;
+              if (rectsIntersect({ x: taskX, y: taskY, width: taskWidth, height: taskHeight }, rect)) {
+                const tid = taskEl.getAttribute('data-id');
+                selectedTasks.add(tid);
+                taskEl.classList.add('selected');
+              }
+            });
+            areaSelect.element.remove();
+            areaSelect = null;
+            return;
+          }
+
+        }
+        
+        // RMB Release: stop canvas panning.
+        else if (e.button === 2) {
+          if (currentPan) {
+            currentPan = null;
+            document.getElementById('canvas').style.cursor = 'default';
+            return;
+          }
+        }
+
+        return; // End of mouseup handling.
+      }
       
+      // Handle Double-Clicks
       if (e.type === 'dblclick') {
+
+        // Clear selection if Shift is not pressed.
+        if (!ControlState.keys['Shift']) {
+          clearSelection();
+        }
+
         if (!e.target.closest('.task')) {
           const canvas = document.getElementById('canvas');
           const rect = canvas.getBoundingClientRect();
@@ -276,13 +416,34 @@
         }
       }
       
+      // Handle Clicks
       if (e.type === 'click') {
+
+        // Clear selection if Shift is not pressed.
+        if (!ControlState.keys['Shift']) {
+          clearSelection();
+        }
+
         const controlElem = e.target.closest('[data-role]');
         if (controlElem) {
           const role = controlElem.getAttribute('data-role');
           const taskElem = controlElem.closest('.task');
+          const taskHeader = controlElem.closest('.task-header');
           const taskId = taskElem ? taskElem.getAttribute('data-id') : null;
           const taskData = taskId ? tasks[taskId] : null;
+
+          // If shift-clicking a task header, toggle selection.
+          if (taskHeader && ControlState.keys['Shift']) {
+            if (selectedTasks.has(taskId)) {
+              selectedTasks.delete(taskId);
+              taskElem.classList.remove('selected');
+            } else {
+              selectedTasks.add(taskId);
+              taskElem.classList.add('selected');
+            }
+            return;
+          }
+
           if (role === 'title') {
             makeTitleEditable(controlElem, taskData);
             return;
@@ -368,41 +529,97 @@
             return;
           }
         }
+
+        return; // End of click handling.
       }
       
+      // Handle right-clicks
       if (e.type === 'contextmenu') {
         const taskElem = e.target.closest('.task');
+
+        // Right-click on task
         if (taskElem) {
           currentTaskTarget = taskElem.getAttribute('data-id');
           const taskContextMenu = document.getElementById('taskContextMenu');
           taskContextMenu.style.display = 'block';
           taskContextMenu.style.left = e.pageX + 'px';
           taskContextMenu.style.top = e.pageY + 'px';
-          return;
-        } else {
+        }
+
+        // Right-click on canvas
+        else {
           const contextMenu = document.getElementById('contextMenu');
           contextMenu.style.display = 'block';
           contextMenu.style.left = e.pageX + 'px';
           contextMenu.style.top = e.pageY + 'px';
-          return;
         }
+
+        return; // End of contextmenu handling.
       }
       
       // --- Keyboard Shortcuts ---
       if (e.type === 'keydown') {
+
+        // Undo/Redo
         if (ControlState.keys['Control'] && ControlState.keys['z'] && !ControlState.keys['Shift']) {
-          undo();
+          if (ControlState.keys['Shift'])
+            redo();
+          else
+            undo();
         }
-        if (ControlState.keys['Control'] && ControlState.keys['z'] && ControlState.keys['Shift']) {
-          redo();
-        }
+
+        return; // End of keydown handling.
       }
+
+      return; // End of HandleInput function.
     }
     
-    function hideContextMenus() {
-      document.getElementById('contextMenu').style.display = 'none';
-      document.getElementById('taskContextMenu').style.display = 'none';
-      document.getElementById('dependencyContextMenu').style.display = 'none';
+    // ==================================================
+    // Helper Functions for Multi-Selection & Area Selection
+    // ==================================================
+    function clearSelection() {
+      selectedTasks.forEach(tid => {
+        const taskEl = document.querySelector(`.task[data-id="${tid}"]`);
+        if (taskEl) taskEl.classList.remove('selected');
+      });
+      selectedTasks.clear();
+    }
+    
+    function createSelectionRectElement() {
+      const rectEl = document.createElement('div');
+      rectEl.style.position = 'absolute';
+      rectEl.style.border = '1px dashed lightblue';
+      rectEl.style.backgroundColor = 'rgba(173,216,230,0.2)';
+      rectEl.style.pointerEvents = 'none';
+      return rectEl;
+    }
+    
+    function updateSelectionRectElement(areaSelect) {
+      const x = Math.min(areaSelect.startX, areaSelect.currentX);
+      const y = Math.min(areaSelect.startY, areaSelect.currentY);
+      const width = Math.abs(areaSelect.startX - areaSelect.currentX);
+      const height = Math.abs(areaSelect.startY - areaSelect.currentY);
+      areaSelect.element.style.left = x + 'px';
+      areaSelect.element.style.top = y + 'px';
+      areaSelect.element.style.width = width + 'px';
+      areaSelect.element.style.height = height + 'px';
+    }
+    
+    function getSelectionRect(areaSelect) {
+      const canvas = document.getElementById('canvas');
+      const canvasRect = canvas.getBoundingClientRect();
+      const x = Math.min(areaSelect.startX, areaSelect.currentX) - canvasRect.left;
+      const y = Math.min(areaSelect.startY, areaSelect.currentY) - canvasRect.top;
+      const width = Math.abs(areaSelect.startX - areaSelect.currentX);
+      const height = Math.abs(areaSelect.startY - areaSelect.currentY);
+      return { x, y, width, height };
+    }
+    
+    function rectsIntersect(r1, r2) {
+      return !(r2.x > r1.x + r1.width ||
+               r2.x + r2.width < r1.x ||
+               r2.y > r1.y + r1.height ||
+               r2.y + r2.height < r1.y);
     }
     
     // ==================================================
@@ -622,6 +839,12 @@
     }
     function autosave() {
       console.log("Autosaved", { tasks, dependencies });
+    }
+    
+    function hideContextMenus() {
+      document.getElementById('contextMenu').style.display = 'none';
+      document.getElementById('taskContextMenu').style.display = 'none';
+      document.getElementById('dependencyContextMenu').style.display = 'none';
     }
     
     // ==================================================
