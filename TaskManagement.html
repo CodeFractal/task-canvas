@@ -34,597 +34,52 @@
     <div id="deleteDependencyMenu">Delete Dependency</div>
   </div>
   
-  <!-- 3rd-party libraries -->
-  <!-- Quill for rich text editing -->
+  <!-- Quill is a 3rd-party library for rich text editing -->
   <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
+
   <!-- Custom dependency arrow solution -->
   <script src="DependencyArrow.js"></script>
-  <!-- New input virtualization module -->
-  <script src="InputInterpreter.js"></script>
-  <!-- New custom pan/zoom module -->
+
+  <!-- Custom pan/zoom module -->
   <script src="CustomPanZoom.js"></script>
+
+  <!-- Provides a layer of abstraction for working with the DOM -->
+  <script src="DOMController.js"></script>
+
+  <!-- Control Scheme for Mouse and Keyboard -->
+  <script src="MouseInputInterpreter.js"></script>
+  <script src="MouseAndKeyboardAppController.js"></script>
   
   <script>
-    // ==================================================
-    // Disable the Browser's Default Context Menu
-    // ==================================================
+    // Disable the browser's default context menu
     document.addEventListener('contextmenu', (e) => {
       e.preventDefault();
     }, true);
-    
-    // ==================================================
+
+    // --------------------------------------------------
     // Global Config & Application State
-    // ==================================================
+    // --------------------------------------------------
     const GHOST_ARROW_INVALID_COLOR = "#b3555588";
     const GHOST_ARROW_VALID_COLOR = "#55b38888";
     const DEPENDENCY_ARROW_COLOR = "#b3b3b3";
     
+    const AppController = MouseAndKeyboardAppController;
+
     const tasks = {};          // { taskId: taskData }
     const dependencies = [];   // each: { from, to, arrow }
     const undoStack = [];
     const redoStack = [];
     let taskIdCounter = 1;
-    
-    // New selection & multi-drag state
-    const selectedTasks = new Set();
-    let currentGroupDrag = null;  // { startMouseX, startMouseY, originalPositions: { taskId: {x,y} } }
-    let currentDrag = null;       // For single-task drag (if the task isn't already selected)
-    let areaSelect = null;        // { startX, startY, currentX, currentY, element }
-    
-    // Dependency creation state
+
+    // Variables for dependency creation state
     let dependencyCreationMode = null; // "source" or "target"
     let dependencyCreationFixedTask = null; // fixed task id
     let ghostArrow = null;
-    let ghostSnapTarget = null;  // the task id that the ghost arrow is snapping to
-    
-    // Dragging state for background panning (using right mouse button)
-    let currentPan = null;   // { startMouseX, startMouseY, origTranslateX, origTranslateY }
-    
-    // Global ControlState updated via our virtual events.
-    const ControlState = {
-      mouseX: 0,
-      mouseY: 0,
-      leftPressed: false,
-      rightPressed: false,
-      middlePressed: false,
-      keys: {},
-      lastEvent: null,
-      target: null
-    };
-    
-    function updateControlState(e) {
-      ControlState.lastEvent = e;
-      ControlState.mouseX = e.clientX;
-      ControlState.mouseY = e.clientY;
-      ControlState.target = e.target;
-      if (e.type === 'mousedown') {
-        if (e.button === 0) ControlState.leftPressed = true;
-        if (e.button === 2) ControlState.rightPressed = true;
-        if (e.button === 1) ControlState.middlePressed = true;
-      }
-      if (e.type === 'mouseup') {
-        if (e.button === 0) ControlState.leftPressed = false;
-        if (e.button === 2) ControlState.rightPressed = false;
-        if (e.button === 1) ControlState.middlePressed = false;
-      }
-      if (e.type === 'keydown') {
-        ControlState.keys[e.key] = true;
-      }
-      if (e.type === 'keyup') {
-        ControlState.keys[e.key] = false;
-      }
-    }
-    
-    // ==================================================
-    // Centralized HandleInput Function (using virtual events)
-    // ==================================================
-    function HandleInput(e) {
-      // --- Dependency Creation Handling (unchanged) ---
-      if (dependencyCreationMode) {
-        const canvas = document.getElementById('canvas');
-        const canvasRect = canvas.getBoundingClientRect();
-        const mousePos = { x: ControlState.mouseX - canvasRect.left, y: ControlState.mouseY - canvasRect.top };
-        const elem = document.elementFromPoint(ControlState.mouseX, ControlState.mouseY);
-        if (elem) {
-          const taskElem = elem.closest('.task');
-          if (taskElem) {
-            const taskId = taskElem.getAttribute('data-id');
-            ghostSnapTarget = (taskId && taskId !== dependencyCreationFixedTask) ? taskId : null;
-          } else {
-            ghostSnapTarget = null;
-          }
-        } else {
-          ghostSnapTarget = null;
-        }
-        if (dependencyCreationMode === "source") {
-          const fixedEl = document.querySelector(`.task[data-id="${dependencyCreationFixedTask}"]`);
-          if (ghostSnapTarget) {
-            const targetEl = document.querySelector(`.task[data-id="${ghostSnapTarget}"]`);
-            ghostArrow.update(targetEl, fixedEl, { pzZoomFactor: CustomPanZoom.getScale() });
-            ghostArrow.setColor(GHOST_ARROW_VALID_COLOR);
-          } else {
-            ghostArrow.update(mousePos, fixedEl, { pzZoomFactor: CustomPanZoom.getScale() });
-            ghostArrow.setColor(GHOST_ARROW_INVALID_COLOR);
-          }
-        } else if (dependencyCreationMode === "target") {
-          const fixedEl = document.querySelector(`.task[data-id="${dependencyCreationFixedTask}"]`);
-          if (ghostSnapTarget) {
-            const sourceEl = document.querySelector(`.task[data-id="${ghostSnapTarget}"]`);
-            ghostArrow.update(fixedEl, sourceEl, { pzZoomFactor: CustomPanZoom.getScale() });
-            ghostArrow.setColor(GHOST_ARROW_VALID_COLOR);
-          } else {
-            ghostArrow.update(fixedEl, mousePos, { pzZoomFactor: CustomPanZoom.getScale() });
-            ghostArrow.setColor(GHOST_ARROW_INVALID_COLOR);
-          }
-        }
-        // Complete dependency intent on left mouseup/click.
-        if ((e.type === 'mouseup' || e.type === 'click') && e.button === 0) {
-          if (ghostSnapTarget) {
-            if (dependencyCreationMode === "source") {
-              addDependency(dependencyCreationFixedTask, ghostSnapTarget);
-            } else if (dependencyCreationMode === "target") {
-              addDependency(ghostSnapTarget, dependencyCreationFixedTask);
-            }
-          }
-          if (ghostArrow) { ghostArrow.remove(); ghostArrow = null; }
-          dependencyCreationMode = null;
-          dependencyCreationFixedTask = null;
-          ghostSnapTarget = null;
-          return;
-        }
-        // Cancel dependency creation on right-click (virtual contextmenu).
-        if (e.type === 'contextmenu' && e.button === 2) {
-          if (ghostArrow) { ghostArrow.remove(); ghostArrow = null; }
-          dependencyCreationMode = null;
-          dependencyCreationFixedTask = null;
-          ghostSnapTarget = null;
-          return;
-        }
-        return; // Don't take any other actions in dependency creation mode.
-      }
-      
-      if (e.type === 'mousedown') {
+    let ghostSnapTarget = null;
 
-        // LMB down
-        if (e.button === 0) {
-          // LMB down on task header: begin dragging task(s)
-          const taskHeader = e.target.closest('.task-header');
-          if (taskHeader) {
-            if (!e.target.matches('input[type="text"]')) {
-              const taskElem = taskHeader.closest('.task');
-              const taskId = taskElem.getAttribute('data-id');
-
-              // If the task being dragged is part of the selection, start group drag.
-              if (selectedTasks.has(taskId)) {
-                currentGroupDrag = {
-                  startMouseX: ControlState.mouseX,
-                  startMouseY: ControlState.mouseY,
-                  originalPositions: {}
-                };
-                selectedTasks.forEach(tid => {
-                  currentGroupDrag.originalPositions[tid] = { x: tasks[tid].x, y: tasks[tid].y };
-                });
-              }
-
-              // If the task is not part of the selection, clear selection and start single task drag.
-              else {
-                clearSelection();
-                currentDrag = {
-                  taskId: taskId,
-                  startMouseX: ControlState.mouseX,
-                  startMouseY: ControlState.mouseY,
-                  origX: tasks[taskId].x,
-                  origY: tasks[taskId].y
-                };
-              }
-              
-              return; // Dragging started, no further processing needed.
-            }
-          }
-
-          // LMB down on canvas: begin area selection.
-          else if (!e.target.closest('.task')) {
-            // Clear selection if Shift is not pressed.
-            if (!ControlState.keys['Shift']) {              
-              clearSelection();
-            }
-            areaSelect = {
-              startX: ControlState.mouseX,
-              startY: ControlState.mouseY,
-              currentX: ControlState.mouseX,
-              currentY: ControlState.mouseY,
-              element: createSelectionRectElement()
-            };
-            document.getElementById('canvas').appendChild(areaSelect.element);
-          }
-
-        }
-        
-        // RMB down: start canvas panning.
-        else if (e.button === 2) {
-          currentPan = {
-            startMouseX: ControlState.mouseX,
-            startMouseY: ControlState.mouseY,
-            origTranslateX: CustomPanZoom.getTranslateX(),
-            origTranslateY: CustomPanZoom.getTranslateY()
-          };
-          document.getElementById('canvas').style.cursor = 'grabbing';
-        }
-
-        return; // End of mousedown handling.
-      }
-      
-      if (e.type === 'mousemove') {
-
-        // LMB drag
-        if (ControlState.leftPressed) {
-
-          // If we're in group drag mode, move all selected tasks together.
-          if (currentGroupDrag) {
-            // Move all selected tasks together.
-            const deltaX = ControlState.mouseX - currentGroupDrag.startMouseX;
-            const deltaY = ControlState.mouseY - currentGroupDrag.startMouseY;
-            selectedTasks.forEach(tid => {
-              const orig = currentGroupDrag.originalPositions[tid];
-              let newX = orig.x + deltaX;
-              let newY = orig.y + deltaY;
-              // Apply grid snapping.
-              const gridX = Math.round(newX / 40) * 40;
-              const gridY = Math.round(newY / 40) * 40;
-              if (Math.abs(newX - gridX) <= 5) newX = gridX;
-              if (Math.abs(newY - gridY) <= 5) newY = gridY;
-              const taskEl = document.querySelector(`.task[data-id="${tid}"]`);
-              if (taskEl) {
-                taskEl.style.left = newX + 'px';
-                taskEl.style.top = newY + 'px';
-              }
-              tasks[tid].x = newX;
-              tasks[tid].y = newY;
-              updateTaskDependencies(tid);
-            });
-            return;
-          }
-
-          // If we're in single-task drag mode, move the task.
-          if (currentDrag) {
-            const deltaX = ControlState.mouseX - currentDrag.startMouseX;
-            const deltaY = ControlState.mouseY - currentDrag.startMouseY;
-            let newX = currentDrag.origX + deltaX;
-            let newY = currentDrag.origY + deltaY;
-            // Apply grid snapping.
-            const gridX = Math.round(newX / 40) * 40;
-            const gridY = Math.round(newY / 40) * 40;
-            if (Math.abs(newX - gridX) <= 5) newX = gridX;
-            if (Math.abs(newY - gridY) <= 5) newY = gridY;
-            const taskEl = document.querySelector(`.task[data-id="${currentDrag.taskId}"]`);
-            if (taskEl) {
-              taskEl.style.left = newX + 'px';
-              taskEl.style.top = newY + 'px';
-            }
-            tasks[currentDrag.taskId].x = newX;
-            tasks[currentDrag.taskId].y = newY;
-            updateTaskDependencies(currentDrag.taskId);
-            return;
-          }
-
-          // If we're in area selection mode, update the selection rectangle.
-          if (areaSelect) {
-            // Update the selection rectangle.
-            areaSelect.currentX = ControlState.mouseX;
-            areaSelect.currentY = ControlState.mouseY;
-            updateSelectionRectElement(areaSelect);
-            return;
-          }
-
-        }
-        
-        // RMB drag: pan the canvas.
-        if (ControlState.rightPressed) {
-          // Right-button dragging for background panning.
-          if (currentPan) {
-            const deltaX = ControlState.mouseX - currentPan.startMouseX;
-            const deltaY = ControlState.mouseY - currentPan.startMouseY;
-            CustomPanZoom.panBy(deltaX, deltaY);
-            currentPan.startMouseX = ControlState.mouseX;
-            currentPan.startMouseY = ControlState.mouseY;
-            return;
-          }
-        }
-
-        return; // End of mousemove handling.
-      }
-      
-      if (e.type === 'mouseup') {
-
-        // LMB Release
-        if (e.button === 0) {
-
-          // If we were in group drag mode, finalize the drag.
-          if (currentGroupDrag) {
-            currentGroupDrag = null;
-            autosave();
-            return;
-          }
-
-          // If we were in single-task drag mode, finalize the drag.
-          if (currentDrag) {
-            currentDrag = null;
-            autosave();
-            return;
-          }
-
-          // If we were in area selection mode, finalize the selection.
-          if (areaSelect) {
-            // Finalize area selection.
-            const rect = getSelectionRect(areaSelect);
-
-            // If Shift is not pressed, clear the selection first.
-            if (!ControlState.keys['Shift']) {
-              clearSelection();
-            }
-            
-            const taskElements = document.querySelectorAll('.task');
-            taskElements.forEach(taskEl => {
-              const canvasRect = document.getElementById('canvas').getBoundingClientRect();
-              const taskRect = taskEl.getBoundingClientRect();
-              // Calculate task position relative to the canvas.
-              const taskX = taskRect.left - canvasRect.left;
-              const taskY = taskRect.top - canvasRect.top;
-              const taskWidth = taskRect.width;
-              const taskHeight = taskRect.height;
-              if (rectsIntersect({ x: taskX, y: taskY, width: taskWidth, height: taskHeight }, rect)) {
-                const tid = taskEl.getAttribute('data-id');
-                selectedTasks.add(tid);
-                taskEl.classList.add('selected');
-              }
-            });
-            areaSelect.element.remove();
-            areaSelect = null;
-            return;
-          }
-
-        }
-        
-        // RMB Release: stop canvas panning.
-        else if (e.button === 2) {
-          if (currentPan) {
-            currentPan = null;
-            document.getElementById('canvas').style.cursor = 'default';
-            return;
-          }
-        }
-
-        return; // End of mouseup handling.
-      }
-      
-      // Handle Double-Clicks
-      if (e.type === 'dblclick') {
-
-        // Clear selection if Shift is not pressed.
-        if (!ControlState.keys['Shift']) {
-          clearSelection();
-        }
-
-        if (!e.target.closest('.task')) {
-          const canvas = document.getElementById('canvas');
-          const rect = canvas.getBoundingClientRect();
-          const scale = CustomPanZoom.getScale();
-          const x = (e.clientX - rect.left) / scale;
-          const y = (e.clientY - rect.top) / scale;
-          createTask(x, y);
-          return;
-        }
-      }
-      
-      // Handle Clicks
-      if (e.type === 'click') {
-
-        // Clear selection if Shift is not pressed.
-        if (!ControlState.keys['Shift']) {
-          clearSelection();
-        }
-
-        const controlElem = e.target.closest('[data-role]');
-        if (controlElem) {
-          const role = controlElem.getAttribute('data-role');
-          const taskElem = controlElem.closest('.task');
-          const taskHeader = controlElem.closest('.task-header');
-          const taskId = taskElem ? taskElem.getAttribute('data-id') : null;
-          const taskData = taskId ? tasks[taskId] : null;
-
-          // If shift-clicking a task header, toggle selection.
-          if (taskHeader && ControlState.keys['Shift']) {
-            if (selectedTasks.has(taskId)) {
-              selectedTasks.delete(taskId);
-              taskElem.classList.remove('selected');
-            } else {
-              selectedTasks.add(taskId);
-              taskElem.classList.add('selected');
-            }
-            return;
-          }
-
-          if (role === 'title') {
-            makeTitleEditable(controlElem, taskData);
-            return;
-          }
-          if (role === 'description') {
-            makeDescriptionEditable(controlElem, taskData);
-            return;
-          }
-          if (role === 'checkbox') {
-            // Toggle task completion and update the fill opacity.
-            taskData.completed = !taskData.completed;
-            const fillElem = controlElem.querySelector('.checkbox-fill');
-            if (fillElem) {
-              // Update the fill-opacity attribute in the inner SVG.
-              const innerRect = fillElem.querySelector('rect[mask]');
-              if(innerRect) {
-                innerRect.setAttribute('fill-opacity', taskData.completed ? '1' : '0.1');
-              }
-            }
-            pushUndo({ type: 'toggleComplete', taskId: taskData.id, newValue: taskData.completed, oldValue: !taskData.completed });
-            autosave();
-            return;
-          }
-          if (role === 'toggle') {
-            taskData.collapsed = !taskData.collapsed;
-            const taskBody = taskElem.querySelector('.task-body');
-            if (taskBody) taskBody.style.display = taskData.collapsed ? 'none' : 'block';
-            controlElem.textContent = taskData.collapsed ? '+' : '-';
-            pushUndo({ type: 'toggleCollapse', taskId: taskData.id, newValue: taskData.collapsed, oldValue: !taskData.collapsed });
-            autosave();
-            return;
-          }
-        }
-        if (e.target.id === 'addTaskMenu') {
-          const canvas = document.getElementById('canvas');
-          const rect = canvas.getBoundingClientRect();
-          const scale = CustomPanZoom.getScale();
-          const x = (parseInt(document.getElementById('contextMenu').style.left) - rect.left) / scale;
-          const y = (parseInt(document.getElementById('contextMenu').style.top) - rect.top) / scale;
-          createTask(x, y);
-          hideContextMenus();
-          return;
-        }
-        if (e.target.id === 'deleteTaskMenu') {
-          if (currentTaskTarget) {
-            removeTask(currentTaskTarget);
-            currentTaskTarget = null;
-            hideContextMenus();
-            return;
-          }
-        }
-        if (e.target.id === 'requiresDepMenu') {
-          dependencyCreationMode = "source";
-          dependencyCreationFixedTask = currentTaskTarget;
-          ghostSnapTarget = null;
-          const canvas = document.getElementById('canvas');
-          const canvasRect = canvas.getBoundingClientRect();
-          const taskEl = document.querySelector(`.task[data-id="${dependencyCreationFixedTask}"]`);
-          const rect = taskEl.getBoundingClientRect();
-          const fixedPoint = { x: rect.left + rect.width/2 - canvasRect.left, y: rect.top + rect.height/2 - canvasRect.top };
-          ghostArrow = DependencyArrow.createArrow(canvas, fixedPoint, taskEl, { color: GHOST_ARROW_INVALID_COLOR, pzZoomFactor: CustomPanZoom.getScale() });
-          hideContextMenus();
-          return;
-        }
-        if (e.target.id === 'requiredByDepMenu') {
-          dependencyCreationMode = "target";
-          dependencyCreationFixedTask = currentTaskTarget;
-          ghostSnapTarget = null;
-          const canvas = document.getElementById('canvas');
-          const canvasRect = canvas.getBoundingClientRect();
-          const taskEl = document.querySelector(`.task[data-id="${dependencyCreationFixedTask}"]`);
-          const rect = taskEl.getBoundingClientRect();
-          const fixedPoint = { x: rect.left + rect.width/2 - canvasRect.left, y: rect.top + rect.height/2 - canvasRect.top };
-          ghostArrow = DependencyArrow.createArrow(canvas, taskEl, fixedPoint, { color: GHOST_ARROW_INVALID_COLOR, pzZoomFactor: CustomPanZoom.getScale() });
-          hideContextMenus();
-          return;
-        }
-        if (e.target.id === 'deleteDependencyMenu') {
-          if (currentDependencyTarget) {
-            removeDependency(currentDependencyTarget.from, currentDependencyTarget.to);
-            currentDependencyTarget = null;
-            hideContextMenus();
-            return;
-          }
-        }
-
-        return; // End of click handling.
-      }
-      
-      // Handle right-clicks
-      if (e.type === 'contextmenu') {
-        const taskElem = e.target.closest('.task');
-
-        // Right-click on task
-        if (taskElem) {
-          currentTaskTarget = taskElem.getAttribute('data-id');
-          const taskContextMenu = document.getElementById('taskContextMenu');
-          taskContextMenu.style.display = 'block';
-          taskContextMenu.style.left = e.pageX + 'px';
-          taskContextMenu.style.top = e.pageY + 'px';
-        }
-
-        // Right-click on canvas
-        else {
-          const contextMenu = document.getElementById('contextMenu');
-          contextMenu.style.display = 'block';
-          contextMenu.style.left = e.pageX + 'px';
-          contextMenu.style.top = e.pageY + 'px';
-        }
-
-        return; // End of contextmenu handling.
-      }
-      
-      // --- Keyboard Shortcuts ---
-      if (e.type === 'keydown') {
-
-        // Undo/Redo
-        if (ControlState.keys['Control'] && ControlState.keys['z'] && !ControlState.keys['Shift']) {
-          if (ControlState.keys['Shift'])
-            redo();
-          else
-            undo();
-        }
-
-        return; // End of keydown handling.
-      }
-
-      return; // End of HandleInput function.
-    }
-    
-    // ==================================================
-    // Helper Functions for Multi-Selection & Area Selection
-    // ==================================================
-    function clearSelection() {
-      selectedTasks.forEach(tid => {
-        const taskEl = document.querySelector(`.task[data-id="${tid}"]`);
-        if (taskEl) taskEl.classList.remove('selected');
-      });
-      selectedTasks.clear();
-    }
-    
-    function createSelectionRectElement() {
-      const rectEl = document.createElement('div');
-      rectEl.style.position = 'absolute';
-      rectEl.style.border = '1px dashed lightblue';
-      rectEl.style.backgroundColor = 'rgba(173,216,230,0.2)';
-      rectEl.style.pointerEvents = 'none';
-      return rectEl;
-    }
-    
-    function updateSelectionRectElement(areaSelect) {
-      const x = Math.min(areaSelect.startX, areaSelect.currentX);
-      const y = Math.min(areaSelect.startY, areaSelect.currentY);
-      const width = Math.abs(areaSelect.startX - areaSelect.currentX);
-      const height = Math.abs(areaSelect.startY - areaSelect.currentY);
-      areaSelect.element.style.left = x + 'px';
-      areaSelect.element.style.top = y + 'px';
-      areaSelect.element.style.width = width + 'px';
-      areaSelect.element.style.height = height + 'px';
-    }
-    
-    function getSelectionRect(areaSelect) {
-      const canvas = document.getElementById('canvas');
-      const canvasRect = canvas.getBoundingClientRect();
-      const x = Math.min(areaSelect.startX, areaSelect.currentX) - canvasRect.left;
-      const y = Math.min(areaSelect.startY, areaSelect.currentY) - canvasRect.top;
-      const width = Math.abs(areaSelect.startX - areaSelect.currentX);
-      const height = Math.abs(areaSelect.startY - areaSelect.currentY);
-      return { x, y, width, height };
-    }
-    
-    function rectsIntersect(r1, r2) {
-      return !(r2.x > r1.x + r1.width ||
-               r2.x + r2.width < r1.x ||
-               r2.y > r1.y + r1.height ||
-               r2.y + r2.height < r1.y);
-    }
-    
-    // ==================================================
-    // Task / Dependency Functions (unchanged)
-    // ==================================================
+    // --------------------------------------------------
+    // Core Task & Dependency Functions (Business Logic)
+    // --------------------------------------------------
     function createTask(x, y) {
       const taskId = 'task-' + taskIdCounter++;
       const taskData = {
@@ -637,242 +92,172 @@
         collapsed: false
       };
       tasks[taskId] = taskData;
-      addTaskToCanvas(taskData);
+      // Delegate DOM creation to the DOMController.
+      DOMController.addTaskToCanvas(taskData);
       pushUndo({ type: 'addTask', task: taskData });
       autosave();
     }
-    
-    function addTaskToCanvas(taskData) {
-      const taskEl = document.createElement('div');
-      taskEl.classList.add('task');
-      taskEl.setAttribute('data-id', taskData.id);
-      taskEl.style.left = taskData.x + 'px';
-      taskEl.style.top = taskData.y + 'px';
-      taskEl.setAttribute('data-snapped', (taskData.x % 40 === 0 && taskData.y % 40 === 0) ? "true" : "false");
-      
-      // Build header with controls.
-      const header = document.createElement('div');
-      header.classList.add('task-header');
-      
-      const toggle = document.createElement('div');
-      toggle.classList.add('toggle');
-      toggle.setAttribute('data-role', 'toggle');
-      toggle.textContent = taskData.collapsed ? '+' : '-';
-      header.appendChild(toggle);
-      
-      const title = document.createElement('div');
-      title.classList.add('title');
-      title.setAttribute('data-role', 'title');
-      title.textContent = taskData.title;
-      header.appendChild(title);
-      
-      // Custom Checkbox: Replace the original input checkbox with two divs.
-      const checkbox = document.createElement('div');
-      checkbox.classList.add('custom-checkbox');
-      checkbox.setAttribute('data-role', 'checkbox');
-      
-      const checkboxFill = document.createElement('div');
-      checkboxFill.classList.add('checkbox-fill');
-      // Insert the exact SVG provided, using a unique mask id for this task.
-      checkboxFill.innerHTML = `
-<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28" style="background: transparent; background-color: transparent; color-scheme: dark;">
-  <rect x="1" y="1" width="26" height="26" rx="3.75" ry="3.75" fill="none" stroke="#4d4d4d" stroke-width="2"></rect>
-  <defs>
-    <mask id="checkMask-${taskData.id}">
-      <rect x="0" y="0" width="28" height="28" fill="white"></rect>
-      <polyline points="8,15 12,19 20,9" stroke="black" stroke-width="2" stroke-linecap="round" fill="none" stroke-linejoin="round"></polyline>
-    </mask>
-  </defs>
-  <rect x="4" y="4" width="20" height="20" rx="1.9" ry="1.9" fill="#25a599" fill-opacity="${taskData.completed ? '1' : '0.1'}" mask="url(#checkMask-${taskData.id})"></rect>
-</svg>`;
-      checkbox.appendChild(checkboxFill);
-      header.appendChild(checkbox);
-      
-      taskEl.appendChild(header);
-      
-      const taskBody = document.createElement('div');
-      taskBody.classList.add('task-body');
-      taskEl.appendChild(taskBody);
-      
-      const description = document.createElement('div');
-      description.classList.add('description');
-      description.setAttribute('data-role', 'description');
-      description.innerHTML = taskData.description;
-      taskBody.appendChild(description);
-      
-      document.getElementById('canvas').appendChild(taskEl);
-    }
-    
-    function makeTitleEditable(titleEl, taskData) {
-      const input = document.createElement('input');
-      input.type = 'text';
-      input.value = taskData.title;
-      input.style.width = '100%';
-      titleEl.replaceWith(input);
-      input.focus();
-      input.addEventListener('blur', () => {
-        const oldValue = taskData.title;
-        taskData.title = input.value || 'Untitled';
-        const newTitleEl = document.createElement('div');
-        newTitleEl.classList.add('title');
-        newTitleEl.setAttribute('data-role', 'title');
-        newTitleEl.textContent = taskData.title;
-        input.replaceWith(newTitleEl);
-        pushUndo({ type: 'editTask', taskId: taskData.id, field: 'title', newValue: taskData.title, oldValue });
-        autosave();
-      });
-    }
-    
-    function makeDescriptionEditable(descEl, taskData) {
-      const originalDesc = descEl;
-      const editorContainer = document.createElement('div');
-      const editorElement = document.createElement('div');
-      editorContainer.appendChild(editorElement);
-      editorContainer.classList.add('editor-container');
-      editorContainer.style.minHeight = '50px';
-      originalDesc.parentNode.replaceChild(editorContainer, originalDesc);
-      
-      const quill = new Quill(editorElement, {
-        theme: 'snow',
-        modules: {
-          toolbar: [
-            ['bold', 'italic', 'underline', 'strike'],
-            [{ 'header': 1 }, { 'header': 2 }],
-            [{ 'list': 'ordered' }, { 'list': 'bullet' }],
-            [{ 'indent': '-1' }, { 'indent': '+1' }],
-            [{ 'color': [] }, { 'background': [] }],
-            [{ 'align': [] }],
-            ['clean']
-          ]
-        }
-      });
-      quill.root.innerHTML = taskData.description;
-      quill.focus();
-      setTimeout(() => quill.setSelection(quill.getLength(), 0), 0);
-      
-      function adjustHeight() {
-        const newHeight = quill.root.scrollHeight;
-        editorElement.style.height = newHeight + 'px';
-      }
-      quill.on('text-change', adjustHeight);
-      adjustHeight();
-      
-      function saveAndCleanup() {
-        const oldValue = taskData.description;
-        taskData.description = quill.root.innerHTML;
-        const newDescEl = document.createElement('div');
-        newDescEl.classList.add('description');
-        newDescEl.setAttribute('data-role', 'description');
-        newDescEl.innerHTML = taskData.description;
-        editorContainer.parentNode.replaceChild(newDescEl, editorContainer);
-        pushUndo({ type: 'editTask', taskId: taskData.id, field: 'description', newValue: taskData.description, oldValue });
-        autosave();
-        document.removeEventListener('click', clickOutsideListener);
-      }
-      
-      function clickOutsideListener(e) {
-        if (!editorContainer.contains(e.target)) {
-          saveAndCleanup();
-        }
-      }
-      document.addEventListener('click', clickOutsideListener);
-    }
-    
-    function addDependency(fromId, toId, skipUndo = false) {
-      if (dependencies.find(dep => dep.from === fromId && dep.to === toId)) return;
-      const canvas = document.getElementById('canvas');
-      const fromEl = document.querySelector(`.task[data-id="${fromId}"]`);
-      const toEl = document.querySelector(`.task[data-id="${toId}"]`);
-      if (!fromEl || !toEl) return;
-      const arrow = DependencyArrow.createArrow(canvas, toEl, fromEl, { color: DEPENDENCY_ARROW_COLOR, pzZoomFactor: CustomPanZoom.getScale() });
-      canvas.prepend(arrow.svg);
-      arrow.addEventListener("contextmenu", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        currentDependencyTarget = { from: fromId, to: toId, arrow: arrow };
-        const depContextMenu = document.getElementById('dependencyContextMenu');
-        depContextMenu.style.display = 'block';
-        depContextMenu.style.left = e.pageX + 'px';
-        depContextMenu.style.top = e.pageY + 'px';
-      });
-      dependencies.push({ from: fromId, to: toId, arrow: arrow });
-      if (!skipUndo) {
-        pushUndo({ type: 'addDependency', from: fromId, to: toId });
-      }
-      autosave();
-    }
-    
-    function updateTaskDependencies(taskId) {
-      dependencies.forEach(dep => {
-        if (dep.from === taskId || dep.to === taskId) {
-          const canvas = document.getElementById('canvas');
-          const fromEl = document.querySelector(`.task[data-id="${dep.from}"]`);
-          const toEl = document.querySelector(`.task[data-id="${dep.to}"]`);
-          if (!fromEl || !toEl) return;
-          dep.arrow.update(toEl, fromEl, { pzZoomFactor: CustomPanZoom.getScale() });
-        }
-      });
-    }
-    
+
     function pushUndo(action) {
       undoStack.push(action);
       redoStack.length = 0;
     }
     function undo() { /* Minimal stub */ }
     function redo() { /* Minimal stub */ }
-    
-    function removeTask(taskId, skipUndo) {
-      const taskData = tasks[taskId];
-      if (!taskData) return;
-      const taskEl = document.querySelector(`.task[data-id="${taskId}"]`);
-      if (taskEl) taskEl.remove();
-      delete tasks[taskId];
-      autosave();
-    }
-    function removeDependency(fromId, toId, skipUndo) {
-      const index = dependencies.findIndex(dep => dep.from === fromId && dep.to === toId);
-      if (index >= 0) {
-        dependencies[index].arrow.remove();
-        dependencies.splice(index, 1);
-        autosave();
-      }
-    }
+
     function autosave() {
       console.log("Autosaved", { tasks, dependencies });
     }
     
-    function hideContextMenus() {
-      document.getElementById('contextMenu').style.display = 'none';
-      document.getElementById('taskContextMenu').style.display = 'none';
-      document.getElementById('dependencyContextMenu').style.display = 'none';
-    }
-    
-    // ==================================================
+    // --------------------------------------------------
+    // AppController Subscriptions
+    // --------------------------------------------------
+
+    AppController.onIntent('createTask', (data) => {
+      const canvas = document.getElementById('canvas');
+      const rect = canvas.getBoundingClientRect();
+      const scale = CustomPanZoom.getScale();
+      const x = (data.position.x - rect.left) / scale;
+      const y = (data.position.y - rect.top) / scale;
+      createTask(x, y);
+    });
+
+    AppController.onIntent('toggleTaskCompletion', (data) => {
+      const taskElem = data.taskElement;
+      const taskId = taskElem.getAttribute('data-id');
+      const taskData = tasks[taskId];
+      taskData.completed = !taskData.completed;
+      DOMController.updateTaskCompletionVisual(taskElem, taskData.completed);
+      pushUndo({ type: 'toggleComplete', taskId: taskData.id, newValue: taskData.completed, oldValue: !taskData.completed });
+      autosave();
+    });
+
+    AppController.onIntent('toggleTaskExpansion', (data) => {
+      const taskElem = data.taskElement;
+      const taskId = taskElem.getAttribute('data-id');
+      const taskData = tasks[taskId];
+      taskData.collapsed = !taskData.collapsed;
+      DOMController.toggleTaskExpansionVisual(taskElem, taskData.collapsed);
+      pushUndo({ type: 'toggleCollapse', taskId: taskData.id, newValue: taskData.collapsed, oldValue: !taskData.collapsed });
+      autosave();
+    });
+
+    AppController.onIntent('startEditingTaskTitle', (data) => {
+      const taskElem = data.taskElement;
+      const taskId = taskElem.getAttribute('data-id');
+      const taskData = tasks[taskId];
+      DOMController.editTaskTitle(taskElem, taskData, (oldValue, newValue) => {
+        pushUndo({ type: 'editTask', taskId: taskData.id, field: 'title', newValue, oldValue });
+        autosave();
+      });
+    });
+
+    AppController.onIntent('startEditingTaskDescription', (data) => {
+      const taskElem = data.taskElement;
+      const taskId = taskElem.getAttribute('data-id');
+      const taskData = tasks[taskId];
+      DOMController.editTaskDescription(taskElem, taskData, (oldValue, newValue) => {
+        pushUndo({ type: 'editTask', taskId: taskData.id, field: 'description', newValue, oldValue });
+        autosave();
+      });
+    });
+
+    AppController.onIntent('moveTasks', (data) => {
+      const { taskMovements } = data;
+      taskMovements.forEach(taskMovement => {
+        const { taskElement, canvasPosition } = taskMovement;
+        const taskId = taskElement.getAttribute('data-id');
+        const taskData = tasks[taskId];
+        const currentCanvasPosition = { x: taskData.x, y: taskData.y };
+        taskData.x = canvasPosition.x;
+        taskData.y = canvasPosition.y;
+        DOMController.moveTask(taskElement, canvasPosition);
+        pushUndo({ type: 'moveTask', taskId, oldPosition: currentCanvasPosition, newPosition: canvasPosition });
+        autosave();
+      });
+      
+      // Update dependency arrows so they reflect the new task positions.
+      dependencies.forEach(dep => {
+        const fromEl = document.querySelector(`.task[data-id="${dep.from}"]`);
+        const toEl = document.querySelector(`.task[data-id="${dep.to}"]`);
+        if (fromEl && toEl) {
+          // Arrow was created with (toEl, fromEl) so update accordingly.
+          dep.arrow.update(toEl, fromEl, { pzZoomFactor: CustomPanZoom.getScale() });
+        }
+      });
+    });
+
+    AppController.onIntent('panCanvas', (data) => {
+      CustomPanZoom.panBy(data.mouseMovement.x, data.mouseMovement.y);
+    });
+
+    AppController.onIntent('deleteTasks', (data) => {
+      if (data.taskElement) {
+        const taskId = data.taskElement.getAttribute('data-id');
+        DOMController.removeTask(taskId);
+        delete tasks[taskId];
+      } else if (data.taskElements) {
+        data.taskElements.forEach(taskElem => {
+          const taskId = taskElem.getAttribute('data-id');
+          DOMController.removeTask(taskId);
+          delete tasks[taskId];
+        });
+      }
+      autosave();
+    });
+
+    AppController.onIntent('createDependency', (data) => {
+      const targetTaskId = data.taskId;
+      const fixedTaskId = data.fixedTaskId;
+      const mode = data.mode;
+      if (targetTaskId && targetTaskId !== fixedTaskId) {
+        let arrow;
+        if (mode === "source") {
+          arrow = DOMController.addDependency(fixedTaskId, targetTaskId, { color: DEPENDENCY_ARROW_COLOR });
+        } else if (mode === "target") {
+          arrow = DOMController.addDependency(targetTaskId, fixedTaskId, { color: DEPENDENCY_ARROW_COLOR });
+        }
+        if (arrow) {
+          dependencies.push({
+            from: (mode === "source" ? fixedTaskId : targetTaskId),
+            to: (mode === "source" ? targetTaskId : fixedTaskId),
+            arrow: arrow
+          });
+          pushUndo({
+            type: 'addDependency',
+            from: (mode === "source" ? fixedTaskId : targetTaskId),
+            to: (mode === "source" ? targetTaskId : fixedTaskId)
+          });
+        }
+      }
+      autosave();
+    });
+
+    AppController.onIntent('deleteDependency', (data) => {
+      const svgElem = data.dependencyElement;
+      const depIndex = dependencies.findIndex(d => d.arrow.svg === svgElem);
+      if (depIndex >= 0) {
+        DOMController.removeDependency(dependencies[depIndex].arrow);
+        dependencies.splice(depIndex, 1);
+        autosave();
+      }
+    });
+
+    // Undo/Redo intents
+    AppController.onIntent('undo', () => {
+      undo();
+    });
+    AppController.onIntent('redo', () => {
+      redo();
+    });
+
+    // --------------------------------------------------
     // Initialization
-    // ==================================================
+    // --------------------------------------------------
     document.addEventListener('DOMContentLoaded', () => {
       const canvas = document.getElementById('canvas');
-      // Initialize our custom pan/zoom on the canvas.
       CustomPanZoom.init(canvas);
-      
-      // Initialize our virtual mouse input interpreter.
-      InputInterpreter.init((virtualEvent) => {
-        updateControlState(virtualEvent);
-        HandleInput(virtualEvent);
-      });
-      
-      // Keyboard events continue to be handled as before.
-      ['keydown', 'keyup'].forEach(evt => {
-        document.addEventListener(evt, (e) => {
-          updateControlState(e);
-          HandleInput(e);
-        });
-      });
-      
-      // Hide context menus on any document click.
-      document.addEventListener('click', () => {
-        hideContextMenus();
-      });
+      DOMController.init();
     });
   </script>
 </body>

@@ -1,13 +1,8 @@
 /* InputInterpreter.js
    This module virtualizes raw mouse events into single, interpreted ("virtual") events.
    It exposes a single object: InputInterpreter.
-   Changes:
-   - Separately tracks left- and right-button drag state with individual mouse down events.
-   - Delays mousedown until drag is detected; right-clicks without drag yield a virtual contextmenu.
-   - Virtual events now include valid pageX/pageY properties.
-   - Improved reliability with defensive coding and a destroy method for cleanup.
 */
-const InputInterpreter = (function () {
+const MouseInputInterpreter = (function () {
     let callback = null;
     let leftMouseDownEvent = null;
     let rightMouseDownEvent = null;
