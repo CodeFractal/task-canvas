@@ -1,35 +1,27 @@
-/* CustomPanZoom.js
-   A simple, custom panning and zooming implementation.
-   Exposes a single object: CustomPanZoom.
-   Uses CSS transforms on the canvas element to enable infinite scrolling.
-*/
-const CustomPanZoom = (function () {
-    let canvas;
+export const CustomPanZoom = (function () {
+    let canvas: HTMLElement | null = null;
     let scale = 1;
     let translateX = 0;
     let translateY = 0;
     const minScale = 0.5;
     const maxScale = 5;
 
-    // Initialize the custom pan/zoom on the given element.
-    function init(el) {
+    function init(el: HTMLElement): void {
         canvas = el;
         canvas.style.transformOrigin = "0 0";
-        // Set an initial cursor.
         canvas.style.cursor = "default";
         updateTransform();
-        // Listen for wheel events on the canvas.
-        canvas.addEventListener('wheel', onWheel, { passive: false });
+        canvas.addEventListener("wheel", onWheel, { passive: false });
     }
 
-    // Handle wheel events: if CTRL is pressed, zoom; otherwise, pan.
-    function onWheel(e) {
+    function onWheel(e: WheelEvent): void {
         e.preventDefault();
         if (e.ctrlKey) {
             // Zoom: deltaY < 0 zooms in, deltaY > 0 zooms out.
             const delta = e.deltaY < 0 ? 0.1 : -0.1;
             setScale(scale + delta, e.clientX, e.clientY);
-        } else {
+        }
+        else {
             // Pan: adjust translation based on wheel delta.
             translateX -= e.deltaX;
             translateY -= e.deltaY;
@@ -37,10 +29,9 @@ const CustomPanZoom = (function () {
         }
     }
 
-    // Set a new scale and adjust translation so that the point under the cursor remains fixed.
-    function setScale(newScale, centerX, centerY) {
+    function setScale(newScale: number, centerX: number, centerY: number): void {
         newScale = Math.max(minScale, Math.min(maxScale, newScale));
-        if (newScale !== scale) {
+        if (newScale !== scale && canvas) {
             const rect = canvas.getBoundingClientRect();
             const offsetX = centerX - rect.left;
             const offsetY = centerY - rect.top;
@@ -53,37 +44,35 @@ const CustomPanZoom = (function () {
         }
     }
 
-    // Update the canvas element's CSS transform.
-    function updateTransform() {
+    function updateTransform(): void {
         if (canvas) {
             canvas.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
         }
     }
 
-    // Pan by a given delta.
-    function panBy(deltaX, deltaY) {
+    function panBy(deltaX: number, deltaY: number): void {
         translateX += deltaX;
         translateY += deltaY;
         updateTransform();
     }
 
-    function getScale() {
+    function getScale(): number {
         return scale;
     }
 
-    function getTranslateX() {
+    function getTranslateX(): number {
         return translateX;
     }
 
-    function getTranslateY() {
+    function getTranslateY(): number {
         return translateY;
     }
 
     return {
-        init: init,
-        getScale: getScale,
-        getTranslateX: getTranslateX,
-        getTranslateY: getTranslateY,
-        panBy: panBy
+        init,
+        getScale,
+        getTranslateX,
+        getTranslateY,
+        panBy,
     };
 })();

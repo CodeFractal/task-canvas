@@ -1,264 +1,44 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>GamePlan Canvas with Centralized Input Handling</title>
-  <!-- Quill rich text editor styling -->
-  <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet" />
-  <link href="TaskManagement.css" rel="stylesheet" />
-  <style>
-    /* Highlight selected tasks with a light blue outline */
-    .task.selected {
-      outline: 2px solid lightblue;
-    }
-  </style>
-</head>
-<body>
-  <!-- The canvas where tasks live -->
-  <div id="canvas"></div>
-  
-  <!-- Global context menu for canvas -->
-  <div id="contextMenu" style="display:none; position:absolute;">
-    <div id="addTaskMenu">Add Task</div>
-  </div>
-  
-  <!-- Context menu for tasks -->
-  <div id="taskContextMenu" style="display:none; position:absolute;">
-    <div id="deleteTaskMenu">Delete Task</div>
-    <div id="requiresDepMenu">Requires …</div>
-    <div id="requiredByDepMenu">Required by …</div>
-  </div>
-  
-  <!-- Context menu for dependencies -->
-  <div id="dependencyContextMenu" style="display:none; position:absolute;">
-    <div id="deleteDependencyMenu">Delete Dependency</div>
-  </div>
-  
-  <!-- Quill is a 3rd-party library for rich text editing -->
-  <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
-
-  <!-- Custom dependency arrow solution -->
-  <script src="DependencyArrow.js"></script>
-
-  <!-- Custom pan/zoom module -->
-  <script src="CustomPanZoom.js"></script>
-
-  <!-- Provides a layer of abstraction for working with the DOM -->
-  <script src="DOMController.js"></script>
-
-  <!-- Control Scheme for Mouse and Keyboard -->
-  <script src="MouseInputInterpreter.js"></script>
-  <script src="MouseAndKeyboardAppController.js"></script>
-  
-  <script>
-    // Disable the browser's default context menu
-    document.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-    }, true);
-
-    // --------------------------------------------------
-    // Global Config & Application State
-    // --------------------------------------------------
-    const GHOST_ARROW_INVALID_COLOR = "#b3555588";
-    const GHOST_ARROW_VALID_COLOR = "#55b38888";
-    const DEPENDENCY_ARROW_COLOR = "#b3b3b3";
+  <head>
+    <meta charset="UTF-8" />
+    <title>Task Canvas</title>
+    <!-- Quill rich text editor styling -->
+    <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet" />
+    <link href="TaskManagement.css" rel="stylesheet" />
+    <style>
+      /* Highlight selected tasks with a light blue outline */
+      .task.selected {
+        outline: 2px solid lightblue;
+      }
+    </style>
+  </head>
+  <body>
     
-    const AppController = MouseAndKeyboardAppController;
-
-    const tasks = {};          // { taskId: taskData }
-    const dependencies = [];   // each: { from, to, arrow }
-    const undoStack = [];
-    const redoStack = [];
-    let taskIdCounter = 1;
-
-    // Variables for dependency creation state
-    let dependencyCreationMode = null; // "source" or "target"
-    let dependencyCreationFixedTask = null; // fixed task id
-    let ghostArrow = null;
-    let ghostSnapTarget = null;
-
-    // --------------------------------------------------
-    // Core Task & Dependency Functions (Business Logic)
-    // --------------------------------------------------
-    function createTask(x, y) {
-      const taskId = 'task-' + taskIdCounter++;
-      const taskData = {
-        id: taskId,
-        title: 'New Task',
-        description: '<p>Description</p>',
-        x: x,
-        y: y,
-        completed: false,
-        collapsed: false
-      };
-      tasks[taskId] = taskData;
-      // Delegate DOM creation to the DOMController.
-      DOMController.addTaskToCanvas(taskData);
-      pushUndo({ type: 'addTask', task: taskData });
-      autosave();
-    }
-
-    function pushUndo(action) {
-      undoStack.push(action);
-      redoStack.length = 0;
-    }
-    function undo() { /* Minimal stub */ }
-    function redo() { /* Minimal stub */ }
-
-    function autosave() {
-      console.log("Autosaved", { tasks, dependencies });
-    }
+    <!-- The canvas where tasks live -->
+    <div id="canvas"></div>
     
-    // --------------------------------------------------
-    // AppController Subscriptions
-    // --------------------------------------------------
+    <!-- Global context menu for canvas -->
+    <div id="contextMenu" style="display:none; position:absolute;">
+      <div id="addTaskMenu">Add Task</div>
+    </div>
+    
+    <!-- Context menu for tasks -->
+    <div id="taskContextMenu" style="display:none; position:absolute;">
+      <div id="deleteTaskMenu">Delete Task</div>
+      <div id="requiresDepMenu">Requires …</div>
+      <div id="requiredByDepMenu">Required by …</div>
+    </div>
+    
+    <!-- Context menu for dependencies -->
+    <div id="dependencyContextMenu" style="display:none; position:absolute;">
+      <div id="deleteDependencyMenu">Delete Dependency</div>
+    </div>
+    
+    <!-- Quill rich text editor -->
+    <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
+    
+    <script src="./dist/app.js"></script>
 
-    AppController.onIntent('createTask', (data) => {
-      const canvas = document.getElementById('canvas');
-      const rect = canvas.getBoundingClientRect();
-      const scale = CustomPanZoom.getScale();
-      const x = (data.position.x - rect.left) / scale;
-      const y = (data.position.y - rect.top) / scale;
-      createTask(x, y);
-    });
-
-    AppController.onIntent('toggleTaskCompletion', (data) => {
-      const taskElem = data.taskElement;
-      const taskId = taskElem.getAttribute('data-id');
-      const taskData = tasks[taskId];
-      taskData.completed = !taskData.completed;
-      DOMController.updateTaskCompletionVisual(taskElem, taskData.completed);
-      pushUndo({ type: 'toggleComplete', taskId: taskData.id, newValue: taskData.completed, oldValue: !taskData.completed });
-      autosave();
-    });
-
-    AppController.onIntent('toggleTaskExpansion', (data) => {
-      const taskElem = data.taskElement;
-      const taskId = taskElem.getAttribute('data-id');
-      const taskData = tasks[taskId];
-      taskData.collapsed = !taskData.collapsed;
-      DOMController.toggleTaskExpansionVisual(taskElem, taskData.collapsed);
-      pushUndo({ type: 'toggleCollapse', taskId: taskData.id, newValue: taskData.collapsed, oldValue: !taskData.collapsed });
-      autosave();
-    });
-
-    AppController.onIntent('startEditingTaskTitle', (data) => {
-      const taskElem = data.taskElement;
-      const taskId = taskElem.getAttribute('data-id');
-      const taskData = tasks[taskId];
-      DOMController.editTaskTitle(taskElem, taskData, (oldValue, newValue) => {
-        pushUndo({ type: 'editTask', taskId: taskData.id, field: 'title', newValue, oldValue });
-        autosave();
-      });
-    });
-
-    AppController.onIntent('startEditingTaskDescription', (data) => {
-      const taskElem = data.taskElement;
-      const taskId = taskElem.getAttribute('data-id');
-      const taskData = tasks[taskId];
-      DOMController.editTaskDescription(taskElem, taskData, (oldValue, newValue) => {
-        pushUndo({ type: 'editTask', taskId: taskData.id, field: 'description', newValue, oldValue });
-        autosave();
-      });
-    });
-
-    AppController.onIntent('moveTasks', (data) => {
-      const { taskMovements } = data;
-      taskMovements.forEach(taskMovement => {
-        const { taskElement, canvasPosition } = taskMovement;
-        const taskId = taskElement.getAttribute('data-id');
-        const taskData = tasks[taskId];
-        const currentCanvasPosition = { x: taskData.x, y: taskData.y };
-        taskData.x = canvasPosition.x;
-        taskData.y = canvasPosition.y;
-        DOMController.moveTask(taskElement, canvasPosition);
-        pushUndo({ type: 'moveTask', taskId, oldPosition: currentCanvasPosition, newPosition: canvasPosition });
-        autosave();
-      });
-      
-      // Update dependency arrows so they reflect the new task positions.
-      dependencies.forEach(dep => {
-        const fromEl = document.querySelector(`.task[data-id="${dep.from}"]`);
-        const toEl = document.querySelector(`.task[data-id="${dep.to}"]`);
-        if (fromEl && toEl) {
-          // Arrow was created with (toEl, fromEl) so update accordingly.
-          dep.arrow.update(toEl, fromEl, { pzZoomFactor: CustomPanZoom.getScale() });
-        }
-      });
-    });
-
-    AppController.onIntent('panCanvas', (data) => {
-      CustomPanZoom.panBy(data.mouseMovement.x, data.mouseMovement.y);
-    });
-
-    AppController.onIntent('deleteTasks', (data) => {
-      if (data.taskElement) {
-        const taskId = data.taskElement.getAttribute('data-id');
-        DOMController.removeTask(taskId);
-        delete tasks[taskId];
-      } else if (data.taskElements) {
-        data.taskElements.forEach(taskElem => {
-          const taskId = taskElem.getAttribute('data-id');
-          DOMController.removeTask(taskId);
-          delete tasks[taskId];
-        });
-      }
-      autosave();
-    });
-
-    AppController.onIntent('createDependency', (data) => {
-      const targetTaskId = data.taskId;
-      const fixedTaskId = data.fixedTaskId;
-      const mode = data.mode;
-      if (targetTaskId && targetTaskId !== fixedTaskId) {
-        let arrow;
-        if (mode === "source") {
-          arrow = DOMController.addDependency(fixedTaskId, targetTaskId, { color: DEPENDENCY_ARROW_COLOR });
-        } else if (mode === "target") {
-          arrow = DOMController.addDependency(targetTaskId, fixedTaskId, { color: DEPENDENCY_ARROW_COLOR });
-        }
-        if (arrow) {
-          dependencies.push({
-            from: (mode === "source" ? fixedTaskId : targetTaskId),
-            to: (mode === "source" ? targetTaskId : fixedTaskId),
-            arrow: arrow
-          });
-          pushUndo({
-            type: 'addDependency',
-            from: (mode === "source" ? fixedTaskId : targetTaskId),
-            to: (mode === "source" ? targetTaskId : fixedTaskId)
-          });
-        }
-      }
-      autosave();
-    });
-
-    AppController.onIntent('deleteDependency', (data) => {
-      const svgElem = data.dependencyElement;
-      const depIndex = dependencies.findIndex(d => d.arrow.svg === svgElem);
-      if (depIndex >= 0) {
-        DOMController.removeDependency(dependencies[depIndex].arrow);
-        dependencies.splice(depIndex, 1);
-        autosave();
-      }
-    });
-
-    // Undo/Redo intents
-    AppController.onIntent('undo', () => {
-      undo();
-    });
-    AppController.onIntent('redo', () => {
-      redo();
-    });
-
-    // --------------------------------------------------
-    // Initialization
-    // --------------------------------------------------
-    document.addEventListener('DOMContentLoaded', () => {
-      const canvas = document.getElementById('canvas');
-      CustomPanZoom.init(canvas);
-      DOMController.init();
-    });
-  </script>
-</body>
+  </body>
 </html>

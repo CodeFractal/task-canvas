@@ -1,0 +1,17 @@
+
+{
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "Start esbuild watch",
+        "type": "shell",
+        "command": "npm run watch",
+        "problemMatcher": [],
+        "isBackground": true,
+        "runOptions": {
+          "runOn": "folderOpen"
+        }
+      }
+    ]
+  }
+  
