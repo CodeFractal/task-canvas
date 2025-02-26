@@ -21,7 +21,7 @@ const GHOST_ARROW_VALID_COLOR: string = '#55b38888';
 const DEPENDENCY_ARROW_COLOR: string = '#b3b3b3';
 
 // Import our controllers
-import { MouseAndKeyboardAppController } from './MouseAndKeyboardAppController';
+import { MouseAndKeyboardAppController } from './Controls/MouseAndKeyboardAppController';
 import { DOMController } from './DOMController';
 import { CustomPanZoom } from './CustomPanZoom';
 

@@ -1,5 +1,6 @@
 import { DependencyArrow } from './DependencyArrow';
 import { CustomPanZoom } from './CustomPanZoom';
+import { Vector2D } from './Abstract/Math';
 
 declare var Quill: any;
 
@@ -42,14 +43,14 @@ export const DOMController = (function () {
    * @param screenPosition The x and y coordinates on the screen.
    * @returns The corresponding canvas coordinates.
    */
-  function screenToCanvasPosition(screenPosition: { x: number; y: number }): { x: number; y: number } {
+  function screenToCanvasPosition(screenPosition: Vector2D): Vector2D {
     const scale = CustomPanZoom.getScale ? CustomPanZoom.getScale() : 1;
     const translateX = CustomPanZoom.getTranslateX ? CustomPanZoom.getTranslateX() : 0;
     const translateY = CustomPanZoom.getTranslateY ? CustomPanZoom.getTranslateY() : 0;
-    return {
-      x: (screenPosition.x - translateX) / scale,
-      y: (screenPosition.y - translateY) / scale,
-    };
+    return new Vector2D(
+      (screenPosition.x - translateX) / scale,
+      (screenPosition.y - translateY) / scale,
+    );
   }
 
   /**
@@ -149,15 +150,14 @@ export const DOMController = (function () {
   }
 
   /**
-   * Gets the current position of a task element on the canvas.
+   * Gets the current position of a task element in canvas space.
    * @param taskElement The task HTMLElement.
-   * @returns An object with x and y coordinates.
    */
-  function getTaskPositionOnCanvas(taskElement: HTMLElement): { x: number; y: number } {
-    return {
-      x: taskElement.offsetLeft,
-      y: taskElement.offsetTop,
-    };
+  function getTaskPositionOnCanvas(taskElement: HTMLElement): Vector2D {
+    return new Vector2D(
+      taskElement.offsetLeft,
+      taskElement.offsetTop,
+    );
   }
 
   /**
