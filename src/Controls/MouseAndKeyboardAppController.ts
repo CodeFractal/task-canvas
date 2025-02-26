@@ -3,7 +3,7 @@ import { DependencyArrow } from '../DependencyArrow';
 import { DOMController } from '../DOMController';
 import { CustomPanZoom } from '../CustomPanZoom';
 import { MouseInputInterpreter } from './Input/MouseInputInterpreter';
-import { IntentData_MoveTask } from './AppController';
+import { AppController, IntentData_ChangeTaskDescription, IntentData_ChangeTaskTitle, IntentData_CreateDependency, IntentData_CreateTask, IntentData_DeleteDependency, IntentData_DeleteTasks, IntentData_MoveTask, IntentData_MoveTasks, IntentData_ToggleTaskCompletion, IntentData_ToggleTaskExpansion } from './AppController';
 
 /**
  * Callback type for handling an intent.
@@ -989,7 +989,24 @@ function deselectAllTasks(): void {
 
 // -------------------- Exported Module -------------------- //
 
-export const MouseAndKeyboardAppController = {
-  init,
-  onIntent
-};
+class AppControllerImplementation implements AppController {
+  public init() {
+    init();
+  }
+  public onIntent(intentName: string, callback: IntentCallback) {
+    onIntent(intentName, callback);
+  }
+  public onCreateTask?: (data: IntentData_CreateTask) => void;
+  public onToggleTaskCompletion?: (data: IntentData_ToggleTaskCompletion) => void;
+  public onToggleTaskExpansion?: (data: IntentData_ToggleTaskExpansion) => void;
+  public onChangeTaskTitle?: (data: IntentData_ChangeTaskTitle) => void;
+  public onChangeTaskDescription?: (data: IntentData_ChangeTaskDescription) => void;
+  public onMoveTasks?: (data: IntentData_MoveTasks) => void;
+  public onDeleteTasks?: (data: IntentData_DeleteTasks) => void;
+  public onCreateDependency?: (data: IntentData_CreateDependency) => void;
+  public onDeleteDependency?: (data: IntentData_DeleteDependency) => void;
+  public onUndo?: () => void;
+  public onRedo?: () => void;
+}
+
+export const MouseAndKeyboardAppController = new AppControllerImplementation();

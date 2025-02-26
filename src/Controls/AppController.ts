@@ -4,37 +4,37 @@ import { Vector2D } from "../Abstract/Math";
 export interface AppController {
 
     /** Called when the user intends to create a new task */
-    onCreateTask: (data: IntentData_CreateTask) => void;
+    onCreateTask?: (data: IntentData_CreateTask) => void;
 
     /** Called when the user intends to toggle the completion of a task */
-    onToggleTaskCompletion: (data: IntentData_ToggleTaskCompletion) => void;
+    onToggleTaskCompletion?: (data: IntentData_ToggleTaskCompletion) => void;
 
     /** Called when the user intends to expand or collapse a task based on its current state */
-    onToggleTaskExpansion: (data: IntentData_ToggleTaskExpansion) => void;
+    onToggleTaskExpansion?: (data: IntentData_ToggleTaskExpansion) => void;
 
     /** Called when the user intends to change the title of a task */
-    onChangeTaskTitle: (data: IntentData_ChangeTaskTitle) => void;
+    onChangeTaskTitle?: (data: IntentData_ChangeTaskTitle) => void;
 
     /** Called when the user intends to change the description of a task */
-    onChangeTaskDescription: (data: IntentData_ChangeTaskDescription) => void;
+    onChangeTaskDescription?: (data: IntentData_ChangeTaskDescription) => void;
 
     /** Called when the user intends to change the position of a task */
-    onMoveTasks: (data: IntentData_MoveTasks) => void;
+    onMoveTasks?: (data: IntentData_MoveTasks) => void;
 
     /** Called when the user intends to delete a task */
-    onDeleteTasks: (data: IntentData_DeleteTasks) => void;
+    onDeleteTasks?: (data: IntentData_DeleteTasks) => void;
 
     /** Called when the user intends to create a new dependency */
-    onCreateDependency: (data: IntentData_CreateDependency) => void;
+    onCreateDependency?: (data: IntentData_CreateDependency) => void;
 
     /** Called when the user intends to delete a dependency */
-    onDeleteDependency: (data: IntentData_DeleteDependency) => void;
+    onDeleteDependency?: (data: IntentData_DeleteDependency) => void;
 
     /** Called when the user intends to undo the last action */
-    onUndo: () => void;
+    onUndo?: () => void;
 
     /** Called when the user intends to redo the last undone action */
-    onRedo: () => void;
+    onRedo?: () => void;
 
 }
 
