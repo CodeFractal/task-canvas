@@ -21,10 +21,10 @@ const GHOST_ARROW_VALID_COLOR: string = '#55b38888';
 const DEPENDENCY_ARROW_COLOR: string = '#b3b3b3';
 
 // Import our controllers
-import * as ac from './Controls/AppController';
-import { MouseAndKeyboardAppController } from './Controls/MouseAndKeyboardAppController';
-import { DOMController } from './DOMController';
-import { CustomPanZoom } from './CustomPanZoom';
+import * as ac from './Controller/AppController';
+import { MouseAndKeyboardAppController } from './Controller/MouseAndKeyboardAppController';
+import { DOMController } from './Presenter/DOMController';
+import { CustomPanZoom } from './Presenter/CustomPanZoom';
 
 const appController = MouseAndKeyboardAppController;
 
@@ -223,6 +223,7 @@ appController.onMoveTasks = (data: ac.IntentData_MoveTasks) => {
         autosave();
     });
 
+    // TODO: This is essentially the code we need... it just needs to be triggered by the appController while dragging
     // Update dependency arrows to reflect new task positions.
     dependencies.forEach((dep: Dependency): void => {
         const fromEl = document.querySelector(`.task[data-id="${dep.from}"]`) as HTMLElement;

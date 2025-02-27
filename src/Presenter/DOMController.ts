@@ -1,6 +1,6 @@
 import { DependencyArrow } from './DependencyArrow';
 import { CustomPanZoom } from './CustomPanZoom';
-import { Vector2D } from './Abstract/Math';
+import { Vector2D } from '../Abstract/Math';
 
 declare var Quill: any;
 

@@ -1,7 +1,7 @@
 import { Vector2D } from '../Abstract/Math';
-import { DependencyArrow } from '../DependencyArrow';
-import { DOMController } from '../DOMController';
-import { CustomPanZoom } from '../CustomPanZoom';
+import { DependencyArrow } from '../Presenter/DependencyArrow';
+import { DOMController } from '../Presenter/DOMController';
+import { CustomPanZoom } from '../Presenter/CustomPanZoom';
 import { MouseInputInterpreter } from './Input/MouseInputInterpreter';
 import { AppController, IntentData_ChangeTaskDescription, IntentData_ChangeTaskTitle, IntentData_CreateDependency, IntentData_CreateTask, IntentData_DeleteDependency, IntentData_DeleteTasks, IntentData_MoveTask, IntentData_MoveTasks, IntentData_ToggleTaskCompletion, IntentData_ToggleTaskExpansion } from './AppController';
 
