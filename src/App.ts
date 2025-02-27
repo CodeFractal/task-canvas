@@ -134,19 +134,6 @@ function autosave(): void {
 // AppController Subscriptions
 // --------------------------------------------------
 
-/**
- * Handles the "createTask" intent.
- * Calculates the canvas position and creates a new task.
- */
-appController.onIntent('createTask', (data: any): void => {
-    const canvas = document.getElementById('canvas') as HTMLElement;
-    const rect = canvas.getBoundingClientRect();
-    const scale = CustomPanZoom.getScale();
-    // Adjust the position based on canvas offset and scale.
-    const x = (data.position.x - rect.left) / scale;
-    const y = (data.position.y - rect.top) / scale;
-    createTask(x, y);
-});
 appController.onCreateTask = (data: ac.IntentData_CreateTask) => {
     const canvas = document.getElementById('canvas') as HTMLElement;
     const rect = canvas.getBoundingClientRect();
@@ -157,27 +144,6 @@ appController.onCreateTask = (data: ac.IntentData_CreateTask) => {
     createTask(x, y);
 };
 
-/**
- * Handles the "toggleTaskCompletion" intent.
- * Toggles the completion state of a task.
- */
-appController.onIntent('toggleTaskCompletion', (data: any): void => {
-    const taskElem = data.taskElement as HTMLElement;
-    const taskId = taskElem.getAttribute('data-id') as string;
-    const taskData = tasks[taskId];
-    // Toggle the completed flag.
-    taskData.completed = !taskData.completed;
-    // Update the visual representation of task completion.
-    DOMController.updateTaskCompletionVisual(taskElem, taskData.completed);
-    // Record the toggle action for undo functionality.
-    pushUndo({
-        type: 'toggleComplete',
-        taskId: taskData.id,
-        newValue: taskData.completed,
-        oldValue: !taskData.completed,
-    });
-    autosave();
-});
 appController.onToggleTaskCompletion = (data: ac.IntentData_ToggleTaskCompletion) => {
     const taskElem = data.taskElement as HTMLElement;
     const taskId = taskElem.getAttribute('data-id') as string;
@@ -196,27 +162,6 @@ appController.onToggleTaskCompletion = (data: ac.IntentData_ToggleTaskCompletion
     autosave();
 };
 
-/**
- * Handles the "toggleTaskExpansion" intent.
- * Toggles the collapsed/expanded state of a task.
- */
-appController.onIntent('toggleTaskExpansion', (data: any): void => {
-    const taskElem = data.taskElement as HTMLElement;
-    const taskId = taskElem.getAttribute('data-id') as string;
-    const taskData = tasks[taskId];
-    // Toggle the collapsed flag.
-    taskData.collapsed = !taskData.collapsed;
-    // Update the visual representation of task expansion.
-    DOMController.toggleTaskExpansionVisual(taskElem, taskData.collapsed);
-    // Record the toggle action for undo functionality.
-    pushUndo({
-        type: 'toggleCollapse',
-        taskId: taskData.id,
-        newValue: taskData.collapsed,
-        oldValue: !taskData.collapsed,
-    });
-    autosave();
-});
 appController.onToggleTaskExpansion = (data: ac.IntentData_ToggleTaskExpansion) => {
     const taskElem = data.taskElement as HTMLElement;
     const taskId = taskElem.getAttribute('data-id') as string;
@@ -235,89 +180,30 @@ appController.onToggleTaskExpansion = (data: ac.IntentData_ToggleTaskExpansion) 
     autosave();
 };
 
-/**
- * Handles the "startEditingTaskTitle" intent.
- * Initiates editing mode for a task's title.
- */
-appController.onIntent('startEditingTaskTitle', (data: any): void => {
-    const taskElem = data.taskElement as HTMLElement;
-    const taskId = taskElem.getAttribute('data-id') as string;
-    const taskData = tasks[taskId];
-    // Open the title editor and handle the update callback.
-    DOMController.editTaskTitle(taskElem, taskData, (oldValue: string, newValue: string): void => {
-        pushUndo({ type: 'editTask', taskId: taskData.id, field: 'title', newValue, oldValue });
-        autosave();
-    });
-});
 appController.onChangeTaskTitle = (data: ac.IntentData_ChangeTaskTitle) => {
     const taskElem = data.taskElement as HTMLElement;
     const taskId = taskElem.getAttribute('data-id') as string;
     const taskData = tasks[taskId];
-    // Open the title editor and handle the update callback.
-    DOMController.editTaskTitle(taskElem, taskData, (oldValue: string, newValue: string): void => {
-        pushUndo({ type: 'editTask', taskId: taskData.id, field: 'title', newValue, oldValue });
-        autosave();
-    });
+    const oldTitle = taskData.title;
+    const newTitle = data.newTitle;
+    
+    taskData.title = newTitle;
+    pushUndo({ type: 'editTask', taskId: taskData.id, field: 'title', newTitle, oldTitle });
+    autosave();
 };
 
-/**
- * Handles the "startEditingTaskDescription" intent.
- * Initiates editing mode for a task's description.
- */
-appController.onIntent('startEditingTaskDescription', (data: any): void => {
-    const taskElem = data.taskElement as HTMLElement;
-    const taskId = taskElem.getAttribute('data-id') as string;
-    const taskData = tasks[taskId];
-    // Open the description editor and handle the update callback.
-    DOMController.editTaskDescription(taskElem, taskData, (oldValue: string, newValue: string): void => {
-        pushUndo({ type: 'editTask', taskId: taskData.id, field: 'description', newValue, oldValue });
-        autosave();
-    });
-});
 appController.onChangeTaskDescription = (data: ac.IntentData_ChangeTaskDescription) => {
     const taskElem = data.taskElement as HTMLElement;
     const taskId = taskElem.getAttribute('data-id') as string;
     const taskData = tasks[taskId];
-    // Open the description editor and handle the update callback.
-    DOMController.editTaskDescription(taskElem, taskData, (oldValue: string, newValue: string): void => {
-        pushUndo({ type: 'editTask', taskId: taskData.id, field: 'description', newValue, oldValue });
-        autosave();
-    });
+    const oldDescription = taskData.description;
+    const newDescription = data.newDescription;
+
+    taskData.description = newDescription;
+    pushUndo({ type: 'editTask', taskId: taskId, field: 'description', newDescription, oldDescription });
+    autosave();
 };
 
-/**
- * Handles the "moveTasks" intent.
- * Updates the position of tasks on the canvas and adjusts dependency arrows.
- */
-appController.onIntent('moveTasks', (data: any): void => {
-    const { taskMovements } = data;
-    // Process each task movement.
-    taskMovements.forEach((taskMovement: any): void => {
-        const { taskElement, canvasPosition } = taskMovement;
-        const taskId = taskElement.getAttribute('data-id') as string;
-        const taskData = tasks[taskId];
-        // Store the current position for undo.
-        const currentCanvasPosition = { x: taskData.x, y: taskData.y };
-        // Update the task's position.
-        taskData.x = canvasPosition.x;
-        taskData.y = canvasPosition.y;
-        // Reflect the movement in the DOM.
-        DOMController.moveTask(taskElement, canvasPosition);
-        // Record the move action.
-        pushUndo({ type: 'moveTask', taskId, oldPosition: currentCanvasPosition, newPosition: canvasPosition });
-        autosave();
-    });
-
-    // Update dependency arrows to reflect new task positions.
-    dependencies.forEach((dep: Dependency): void => {
-        const fromEl = document.querySelector(`.task[data-id="${dep.from}"]`) as HTMLElement;
-        const toEl = document.querySelector(`.task[data-id="${dep.to}"]`) as HTMLElement;
-        if (fromEl && toEl) {
-            // Arrow was created with (toEl, fromEl); update accordingly.
-            dep.arrow.update(toEl, fromEl, { pzZoomFactor: CustomPanZoom.getScale() });
-        }
-    });
-});
 appController.onMoveTasks = (data: ac.IntentData_MoveTasks) => {
     const { taskMovements } = data;
     // Process each task movement.
@@ -348,37 +234,8 @@ appController.onMoveTasks = (data: ac.IntentData_MoveTasks) => {
     });
 };
 
-/**
- * Handles the "panCanvas" intent.
- * Pans the canvas by the specified mouse movement.
- */
-appController.onIntent('panCanvas', (data: any): void => {
-    CustomPanZoom.panBy(data.mouseMovement.x, data.mouseMovement.y);
-});
-
-/**
- * Handles the "deleteTasks" intent.
- * Deletes one or more tasks from the canvas and global state.
- */
-appController.onIntent('deleteTasks', (data: any): void => {
-    if (data.taskElement) {
-        // Remove a single task.
-        const taskId = data.taskElement.getAttribute('data-id') as string;
-        DOMController.removeTask(taskId);
-        delete tasks[taskId];
-    }
-    else if (data.taskElements) {
-        // Remove multiple tasks.
-        data.taskElements.forEach((taskElem: HTMLElement): void => {
-            const taskId = taskElem.getAttribute('data-id') as string;
-            DOMController.removeTask(taskId);
-            delete tasks[taskId];
-        });
-    }
-    autosave();
-});
 appController.onDeleteTasks = (data: ac.IntentData_DeleteTasks) => {
-    data.taskElements.forEach((taskElem: HTMLElement): void => {
+    data.taskElements.forEach((taskElem: Element): void => {
         const taskId = taskElem.getAttribute('data-id') as string;
         DOMController.removeTask(taskId);
         delete tasks[taskId];
@@ -386,44 +243,11 @@ appController.onDeleteTasks = (data: ac.IntentData_DeleteTasks) => {
     autosave();
 };
 
-/**
- * Handles the "createDependency" intent.
- * Creates a dependency arrow between two tasks.
- */
-appController.onIntent('createDependency', (data: any): void => {
-    const targetTaskId = data.taskId as string;
-    const fixedTaskId = data.fixedTaskId as string;
-    const mode = data.mode as 'source' | 'target';
-    if (targetTaskId && targetTaskId !== fixedTaskId) {
-        let arrow: any;
-        if (mode === 'source') {
-            arrow = DOMController.addDependency(fixedTaskId, targetTaskId, { color: DEPENDENCY_ARROW_COLOR });
-        }
-        else if (mode === 'target') {
-            arrow = DOMController.addDependency(targetTaskId, fixedTaskId, { color: DEPENDENCY_ARROW_COLOR });
-        }
-        if (arrow) {
-            // Determine the dependency direction based on the mode.
-            dependencies.push({
-                from: mode === 'source' ? fixedTaskId : targetTaskId,
-                to: mode === 'source' ? targetTaskId : fixedTaskId,
-                arrow: arrow,
-            });
-            // Record the dependency creation for undo functionality.
-            pushUndo({
-                type: 'addDependency',
-                from: mode === 'source' ? fixedTaskId : targetTaskId,
-                to: mode === 'source' ? targetTaskId : fixedTaskId,
-            });
-        }
-    }
-    autosave();
-});
 appController.onCreateDependency = (data: ac.IntentData_CreateDependency) => {
     const requiredTaskId = data.requiredTaskElement.getAttribute('data-id') as string;
     const requiredByTaskId = data.requiredByTaskElement.getAttribute('data-id') as string;
     if (requiredTaskId && requiredTaskId !== requiredByTaskId) {
-        const arrow = DOMController.addDependency(requiredTaskId, requiredByTaskId, { color: DEPENDENCY_ARROW_COLOR });
+        const arrow = DOMController.addDependency(data.requiredTaskElement, data.requiredByTaskElement, { color: DEPENDENCY_ARROW_COLOR });
         if (arrow) {
             dependencies.push({
                 from: requiredTaskId,
@@ -440,21 +264,6 @@ appController.onCreateDependency = (data: ac.IntentData_CreateDependency) => {
     autosave();
 };
 
-/**
- * Handles the "deleteDependency" intent.
- * Deletes a dependency arrow from the canvas and state.
- */
-appController.onIntent('deleteDependency', (data: any): void => {
-    const svgElem = data.dependencyElement;
-    const depIndex = dependencies.findIndex((d: Dependency): boolean => d.arrow.svg === svgElem);
-    if (depIndex >= 0) {
-        // Remove the dependency arrow from the DOM.
-        DOMController.removeDependency(dependencies[depIndex].arrow);
-        // Remove the dependency from the global array.
-        dependencies.splice(depIndex, 1);
-        autosave();
-    }
-});
 appController.onDeleteDependency = (data: ac.IntentData_DeleteDependency) => {
     const depIndex = dependencies.findIndex((d: Dependency): boolean => d.arrow.svg === data.dependencyElement);
     if (depIndex >= 0) {
@@ -465,14 +274,7 @@ appController.onDeleteDependency = (data: ac.IntentData_DeleteDependency) => {
 };
 
 // Undo/Redo intents
-appController.onIntent('undo', (): void => {
-    undo();
-});
 appController.onUndo = undo;
-
-appController.onIntent('redo', (): void => {
-    redo();
-});
 appController.onRedo = redo;
 
 // --------------------------------------------------
@@ -484,8 +286,6 @@ appController.onRedo = redo;
  */
 document.addEventListener('DOMContentLoaded', (): void => {
     const canvas = document.getElementById('canvas') as HTMLElement;
-    // Initialize custom pan/zoom functionality.
     CustomPanZoom.init(canvas);
-    // Initialize DOM related controllers.
     DOMController.init();
 });

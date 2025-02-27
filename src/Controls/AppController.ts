@@ -47,19 +47,19 @@ export interface IntentData_CreateTask {
 /** Holds data associated with the user's intent to toggle the completion of a task */
 export interface IntentData_ToggleTaskCompletion {
     /** The task whose completion should be toggled on/off */
-    taskElement: HTMLElement;
+    taskElement: Element;
 }
 
 /** Holds data associated with the user's intent to expand or collapse a task */
 export interface IntentData_ToggleTaskExpansion {
     /** The task to be expanded or collapsed */
-    taskElement: HTMLElement;
+    taskElement: Element;
 }
 
 /** Holds data associated with the user's intent to change the title of a task */
 export interface IntentData_ChangeTaskTitle {
     /** The task whose title should be changed */
-    taskElement: HTMLElement;
+    taskElement: Element;
     /** The new title of the task */
     newTitle: string;
 }
@@ -67,7 +67,7 @@ export interface IntentData_ChangeTaskTitle {
 /** Holds data associated with the user's intent to change the description of a task */
 export interface IntentData_ChangeTaskDescription {
     /** The task whose description should be changed */
-    taskElement: HTMLElement;
+    taskElement: Element;
     /** The new description of the task */
     newDescription: string;
 }
@@ -75,7 +75,7 @@ export interface IntentData_ChangeTaskDescription {
 /** Holds data associated with the user's intent do move a task */
 export interface IntentData_MoveTask {
     /** The task to be moved */
-    taskElement: HTMLElement;
+    taskElement: Element;
     /** The new position of the task in canvas coordinates */
     canvasPosition: Vector2D;
 }
@@ -89,21 +89,21 @@ export interface IntentData_MoveTasks {
 /** Holds data associated with the user's intent to delete a task */
 export interface IntentData_DeleteTasks {
     /** The tasks to be deleted */
-    taskElements: HTMLElement[];
+    taskElements: Element[];
 }
 
 /** Holds data associated with the user's intent to create a new dependency */
 export interface IntentData_CreateDependency {
     /** The task being required by another */
-    requiredTaskElement: HTMLElement;
+    requiredTaskElement: Element;
     /** The task which requires another */
-    requiredByTaskElement: HTMLElement;
+    requiredByTaskElement: Element;
 }
 
 /** Holds data associated with the user's intent to delete a dependency */
 export interface IntentData_DeleteDependency {
     /** The dependency to be deleted */
-    dependencyElement: HTMLElement;
+    dependencyElement: Element;
 }
 
   

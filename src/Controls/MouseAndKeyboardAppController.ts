@@ -6,18 +6,6 @@ import { MouseInputInterpreter } from './Input/MouseInputInterpreter';
 import { AppController, IntentData_ChangeTaskDescription, IntentData_ChangeTaskTitle, IntentData_CreateDependency, IntentData_CreateTask, IntentData_DeleteDependency, IntentData_DeleteTasks, IntentData_MoveTask, IntentData_MoveTasks, IntentData_ToggleTaskCompletion, IntentData_ToggleTaskExpansion } from './AppController';
 
 /**
- * Callback type for handling an intent.
- */
-type IntentCallback = (data: any) => void;
-
-/**
- * Map of intent names to an array of callback functions.
- */
-interface Subscriptions {
-  [intent: string]: IntentCallback[];
-}
-
-/**
  * Provides context for a context menu.
  */
 interface ContextMenuContext {
@@ -106,10 +94,10 @@ interface ControlState {
   contextMenuContext: ContextMenuContext | null;
 
   /** The mode of dependency creation ('source' or 'target') (encodes the direction of the ghost dependency arrow) */
-  dependencyCreationMode: string | null;
+  dependencyCreationMode: 'source' | 'target' | null;
 
-  /** The ID of the task to which the ghost dependency arrow is fixed */
-  dependencyCreationFixedTask: string | null;
+  /** The task element to which the ghost dependency arrow is fixed */
+  dependencyCreationFirstTask: HTMLElement | null;
 
   /** The ghost dependency arrow element */
   ghostArrow: any;
@@ -138,25 +126,6 @@ interface ControlState {
   /** The original mouse canvas position of the task group anchor */
   taskGroupAnchorOriginalMouseCanvasPosition?: Vector2D;
 }
-
-// -------------------- Intent subscriptions -------------------- //
-
-const subscriptions: Subscriptions = {
-  panCanvas: [],
-  createTask: [],
-  startEditingTaskTitle: [],
-  stopEditingTaskTitle: [],
-  startEditingTaskDescription: [],
-  stopEditingTaskDescription: [],
-  toggleTaskCompletion: [],
-  toggleTaskExpansion: [],
-  moveTasks: [],
-  deleteTasks: [],
-  createDependency: [],
-  deleteDependency: [],
-  undo: [],
-  redo: []
-};
 
 // -------------------- Snap Grid Constants -------------------- //
 
@@ -194,7 +163,7 @@ const ControlState: ControlState = {
   contextMenuContext: null,
 
   dependencyCreationMode: null,
-  dependencyCreationFixedTask: null,
+  dependencyCreationFirstTask: null,
   ghostArrow: null,
 
   mouseIsHoldingDependencyArrow: false,
@@ -204,25 +173,28 @@ const ControlState: ControlState = {
   mouseIsDrawingSelectionBox: false,
 };
 
+// -------------------- Exported Module -------------------- //
+
+class AppControllerImplementation implements AppController {
+  public init() {
+    init();
+  }
+  public onCreateTask?: (data: IntentData_CreateTask) => void;
+  public onToggleTaskCompletion?: (data: IntentData_ToggleTaskCompletion) => void;
+  public onToggleTaskExpansion?: (data: IntentData_ToggleTaskExpansion) => void;
+  public onChangeTaskTitle?: (data: IntentData_ChangeTaskTitle) => void;
+  public onChangeTaskDescription?: (data: IntentData_ChangeTaskDescription) => void;
+  public onMoveTasks?: (data: IntentData_MoveTasks) => void;
+  public onDeleteTasks?: (data: IntentData_DeleteTasks) => void;
+  public onCreateDependency?: (data: IntentData_CreateDependency) => void;
+  public onDeleteDependency?: (data: IntentData_DeleteDependency) => void;
+  public onUndo?: () => void;
+  public onRedo?: () => void;
+}
+
+export const MouseAndKeyboardAppController = new AppControllerImplementation();
+
 // -------------------- Public API Functions -------------------- //
-
-/**
- * Registers a callback for a specific intent.
- * @param intentName the name of the intent
- * @param callback the callback to invoke when the intent is recognized
- */
-function onIntent(intentName: string, callback: IntentCallback): void {
-  subscriptions[intentName].push(callback);
-}
-
-/**
- * Invokes all callbacks associated with a given intent.
- * @param intentName the name of the intent
- * @param data the data to pass to the callbacks
- */
-function recognizeIntent(intentName: string, data: any): void {
-  subscriptions[intentName].forEach(callback => callback(data));
-}
 
 let didInit = false;
 
@@ -333,16 +305,15 @@ function interpretIntent(): void {
   // Special State: Holding Ghost (Dependency) Arrow
   if (ControlState.mouseIsHoldingDependencyArrow) {
     if (e.type === 'mousemove') {
-      let ghostSnapTarget: string | null = null;
+      let ghostSnapTarget: HTMLElement | null = null;
       const potentialTaskElement = DOMController.getTaskElementFromChild(ControlState.target as Element);
-      const potentialTaskId = potentialTaskElement ? potentialTaskElement.getAttribute('data-id') : null;
-      if (potentialTaskId && potentialTaskId !== ControlState.dependencyCreationFixedTask) {
-        ghostSnapTarget = potentialTaskId;
+      if (potentialTaskElement && potentialTaskElement !== ControlState.dependencyCreationFirstTask) {
+        ghostSnapTarget = potentialTaskElement
       }
       DOMController.updateGhostArrow(
-        ControlState.dependencyCreationMode as string,
+        ControlState.dependencyCreationMode!,
         ControlState.ghostArrow,
-        ControlState.dependencyCreationFixedTask as string,
+        ControlState.dependencyCreationFirstTask!,
         ghostSnapTarget,
         ControlState.mousePosition
       );
@@ -350,12 +321,13 @@ function interpretIntent(): void {
 
     // Create a dependency on left-click
     else if (e.type === 'click' && (e as MouseEvent).button === 0) {
-      const taskId = DOMController.getTaskId(ControlState.target as Element);
-      if (taskId) {
-        recognizeIntent('createDependency', {
-          taskId: taskId,
-          fixedTaskId: ControlState.dependencyCreationFixedTask,
-          mode: ControlState.dependencyCreationMode
+      const secondTask = DOMController.getTaskElementFromChild(ControlState.target as Element);
+      if (secondTask) {
+        if (!(ControlState.dependencyCreationFirstTask instanceof Element)) throw new Error('First task is not an element');
+        const firstTask = ControlState.dependencyCreationFirstTask;
+        MouseAndKeyboardAppController.onCreateDependency?.({
+          requiredTaskElement: ControlState.dependencyCreationMode === 'source' ? secondTask : firstTask,
+          requiredByTaskElement: ControlState.dependencyCreationMode === 'source' ? firstTask : secondTask
         });
       }
 
@@ -367,7 +339,7 @@ function interpretIntent(): void {
 
       // Clear dependency creation state.
       ControlState.dependencyCreationMode = null;
-      ControlState.dependencyCreationFixedTask = null;
+      ControlState.dependencyCreationFirstTask = null;
       ControlState.mouseIsHoldingDependencyArrow = false;
       return;
     }
@@ -382,7 +354,7 @@ function interpretIntent(): void {
         ControlState.ghostArrow = null;
       }
       ControlState.dependencyCreationMode = null;
-      ControlState.dependencyCreationFixedTask = null;
+      ControlState.dependencyCreationFirstTask = null;
       ControlState.mouseIsHoldingDependencyArrow = false;
       return;
     }
@@ -393,7 +365,7 @@ function interpretIntent(): void {
   // Special State: Holding Canvas
   if (ControlState.mouseIsHoldingCanvas) {
     if (e.type === 'mousemove') {
-      recognizeIntent('panCanvas', { mouseMovement: ControlState.mouseMovement });
+      // TODO: Implement panning
     }
     else if (e.type === 'mouseup' && (e as MouseEvent).button === 2) {
       ControlState.mouseIsHoldingCanvas = false;
@@ -432,14 +404,16 @@ function interpretIntent(): void {
 
     // Drop a Task
     else if (e.type === 'mouseup' && (e as MouseEvent).button === 0) {
-      recognizeIntent('moveTasks', {
-        taskMovements: [
-          {
-            taskElement: ControlState.taskElementHeldByMouse,
-            canvasPosition: ControlState.taskElementHeldByMouseCurrentCanvasPosition
-          }
-        ]
-      });
+      if (ControlState.taskElementHeldByMouse) {
+        MouseAndKeyboardAppController.onMoveTasks?.({
+          taskMovements: [
+            {
+              taskElement: ControlState.taskElementHeldByMouse,
+              canvasPosition: ControlState.taskElementHeldByMouseCurrentCanvasPosition
+            }
+          ]
+        });
+      }
       ControlState.mouseIsHoldingSingleTask = false;
       ControlState.taskElementHeldByMouse = null;
     }
@@ -514,7 +488,7 @@ function interpretIntent(): void {
           canvasPosition: newPosition
         });
       }
-      recognizeIntent('moveTasks', { taskMovements });
+      MouseAndKeyboardAppController.onMoveTasks?.({ taskMovements });
       ControlState.mouseIsHoldingTaskGroup = false;
       delete ControlState.taskGroupOriginalPositions;
       delete ControlState.taskGroupAnchor;
@@ -634,7 +608,7 @@ function interpretIntent(): void {
       if (e.type === 'dblclick') {
         const eTaskHeader = DOMController.getTaskHeaderElementFromChild(ControlState.target as Element);
         if (eTaskHeader) {
-          recognizeIntent('toggleTaskExpansion', { taskElement: eTask });
+          MouseAndKeyboardAppController.onToggleTaskExpansion?.({ taskElement: eTask });
           return;
         }
       }
@@ -642,28 +616,32 @@ function interpretIntent(): void {
       // Edit Task Title
       const eTaskTitle = DOMController.getTaskTitleElementFromChild(ControlState.target as Element);
       if (eTaskTitle) {
-        recognizeIntent('startEditingTaskTitle', { taskElement: eTask });
+        DOMController.editTaskTitle(eTask, (oldValue: string, newValue: string): void => {
+          MouseAndKeyboardAppController.onChangeTaskTitle?.({ taskElement: eTask, newTitle: newValue });
+        });
         return;
       }
 
       // Edit Task Description
       const eTaskDescription = DOMController.getTaskDescriptionElementFromChild(ControlState.target as Element);
       if (eTaskDescription) {
-        recognizeIntent('startEditingTaskDescription', { taskElement: eTask });
+        DOMController.editTaskDescription(eTask, (oldValue: string, newValue: string): void => {
+          MouseAndKeyboardAppController.onChangeTaskDescription?.({ taskElement: eTask, newDescription: newValue });
+        });
         return;
       }
 
-      // Toggle Expand/Collapse Task
+      // Toggle Expand/Collapse Task (Button Click)
       const eTaskExpand = DOMController.getTaskExpandElementFromChild(ControlState.target as Element);
       if (eTaskExpand) {
-        recognizeIntent('toggleTaskExpansion', { taskElement: eTask });
+        MouseAndKeyboardAppController.onToggleTaskExpansion?.({ taskElement: eTask });
         return;
       }
 
       // Toggle Complete/Incomplete Task
       const eTaskCompletion = DOMController.getTaskCompletionCheckboxFromChild(ControlState.target as Element);
       if (eTaskCompletion) {
-        recognizeIntent('toggleTaskCompletion', { taskElement: eTask });
+        MouseAndKeyboardAppController.onToggleTaskCompletion?.({ taskElement: eTask });
         return;
       }
 
@@ -679,12 +657,13 @@ function interpretIntent(): void {
     else if (e.type === 'dblclick') {
 
       // (floor) Snap the mouse position to the grid.
-      const snappedPosition = {
-        x: Math.floor(ControlState.mousePosition.x / SNAP_GRID_SIZE) * SNAP_GRID_SIZE,
-        y: Math.floor(ControlState.mousePosition.y / SNAP_GRID_SIZE) * SNAP_GRID_SIZE
-      };
+      // TODO: [BUG] Snapping calculation needs to take place in canvas space - not screen space.
+      const snappedPosition = new Vector2D(
+        Math.floor(ControlState.mousePosition.x / SNAP_GRID_SIZE) * SNAP_GRID_SIZE,
+        Math.floor(ControlState.mousePosition.y / SNAP_GRID_SIZE) * SNAP_GRID_SIZE
+      );
 
-      recognizeIntent('createTask', { position: snappedPosition });
+      MouseAndKeyboardAppController.onCreateTask?.({ canvasPosition: snappedPosition });
       return;
     }
 
@@ -749,7 +728,9 @@ function interpretIntent(): void {
 
     // Delete selected tasks
     if (ControlState.keys['Delete'] || ControlState.keys['Backspace']) {
-      recognizeIntent('deleteTasks', { taskElements: Array.from(ControlState.selectedTaskElements) });
+      const taskElements = Array.from(ControlState.selectedTaskElements);
+      ControlState.selectedTaskElements.clear();
+      MouseAndKeyboardAppController.onDeleteTasks?.({ taskElements });
       return;
     }
 
@@ -768,28 +749,37 @@ function handleContextMenuSelection(): boolean {
 
   const option = DOMController.getContextMenuOption(ControlState.target as Element);
   if (option === 'ADD_TASK') {
-    recognizeIntent('createTask', { position: ControlState.contextMenuContext.position });
+    MouseAndKeyboardAppController.onCreateTask?.({ canvasPosition: ControlState.contextMenuContext.position });
   }
   else if (option === 'DELETE_TASK') {
-    recognizeIntent('deleteTasks', { taskElement: ControlState.contextMenuContext.taskElement });
+    if (ControlState.contextMenuContext.taskElement) {
+      ControlState.selectedTaskElements.delete(ControlState.contextMenuContext.taskElement);
+      MouseAndKeyboardAppController.onDeleteTasks?.({ taskElements: [ControlState.contextMenuContext.taskElement] });
+    }
   }
   else if (option === 'DELETE_SELECTED_TASKS') {
-    recognizeIntent('deleteTasks', { taskElements: Array.from(ControlState.selectedTaskElements) });
+    const taskElements = Array.from(ControlState.selectedTaskElements);
+    ControlState.selectedTaskElements.clear();
+    MouseAndKeyboardAppController.onDeleteTasks?.({ taskElements });
   }
   else if (option === 'REQUIRES_DEPENDENCY') {
     // For "Requires Dependency", we treat the fixed task as the one to which another task will be attached (mode 'target')
+    if (!ControlState.contextMenuContext.taskElement) throw new Error('Task element is null');
     ControlState.dependencyCreationMode = 'target';
-    ControlState.dependencyCreationFixedTask = ControlState.contextMenuContext.taskElement!.getAttribute('data-id');
+    ControlState.dependencyCreationFirstTask = ControlState.contextMenuContext.taskElement;
     tryGrabDependencyArrow();
   }
   else if (option === 'REQUIRED_BY_DEPENDENCY') {
     // For "Required By Dependency", we treat the fixed task as the one that requires the dependency (mode 'source')
+    if (!ControlState.contextMenuContext.taskElement) throw new Error('Task element is null');
     ControlState.dependencyCreationMode = 'source';
-    ControlState.dependencyCreationFixedTask = ControlState.contextMenuContext.taskElement!.getAttribute('data-id');
+    ControlState.dependencyCreationFirstTask = ControlState.contextMenuContext.taskElement;
     tryGrabDependencyArrow();
   }
   else if (option === 'DELETE_DEPENDENCY') {
-    recognizeIntent('deleteDependency', { dependencyElement: ControlState.contextMenuContext.dependencyElement });
+    if (ControlState.contextMenuContext.dependencyElement) {
+      MouseAndKeyboardAppController.onDeleteDependency?.({ dependencyElement: ControlState.contextMenuContext.dependencyElement });
+    }
   }
 
   // Reset context menu state.
@@ -912,8 +902,7 @@ function tryGrabDependencyArrow(): boolean {
 
   ControlState.mouseIsHoldingDependencyArrow = true;
   const canvas = DOMController.getCanvas();
-  const fixedTaskId = ControlState.dependencyCreationFixedTask;
-  const fixedEl = canvas.querySelector(`.task[data-id="${fixedTaskId}"]`) as HTMLElement;
+  const fixedEl = ControlState.dependencyCreationFirstTask;
   if (!fixedEl) return false;
   const canvasRect = canvas.getBoundingClientRect();
   const rect = fixedEl.getBoundingClientRect();
@@ -986,27 +975,3 @@ function deselectAllTasks(): void {
   ControlState.selectedTaskElements.forEach(taskElement => DOMController.toggleTaskHighlight(taskElement, false));
   ControlState.selectedTaskElements.clear();
 }
-
-// -------------------- Exported Module -------------------- //
-
-class AppControllerImplementation implements AppController {
-  public init() {
-    init();
-  }
-  public onIntent(intentName: string, callback: IntentCallback) {
-    onIntent(intentName, callback);
-  }
-  public onCreateTask?: (data: IntentData_CreateTask) => void;
-  public onToggleTaskCompletion?: (data: IntentData_ToggleTaskCompletion) => void;
-  public onToggleTaskExpansion?: (data: IntentData_ToggleTaskExpansion) => void;
-  public onChangeTaskTitle?: (data: IntentData_ChangeTaskTitle) => void;
-  public onChangeTaskDescription?: (data: IntentData_ChangeTaskDescription) => void;
-  public onMoveTasks?: (data: IntentData_MoveTasks) => void;
-  public onDeleteTasks?: (data: IntentData_DeleteTasks) => void;
-  public onCreateDependency?: (data: IntentData_CreateDependency) => void;
-  public onDeleteDependency?: (data: IntentData_DeleteDependency) => void;
-  public onUndo?: () => void;
-  public onRedo?: () => void;
-}
-
-export const MouseAndKeyboardAppController = new AppControllerImplementation();

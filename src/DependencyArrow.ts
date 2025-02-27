@@ -28,6 +28,7 @@ interface Point {
     y: number;
 }
 
+// TODO: Make ArrowHandler an exported class
 /**
  * Represents the methods available on an arrow handler.
  */

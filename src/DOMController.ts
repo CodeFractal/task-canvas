@@ -480,31 +480,32 @@ export const DOMController = (function () {
    * Enables inline editing of a task's title.
    * Replaces the title element with an input field and saves the new title on blur.
    * @param taskElem The task HTMLElement.
-   * @param taskData An object containing the current title and id.
    * @param onSave Callback function invoked after saving with (oldValue, newValue).
    */
   function editTaskTitle(
     taskElem: HTMLElement,
-    taskData: { title: string; id: string },
-    onSave: (oldValue: string, newValue: string) => void
+    onChange: (oldValue: string, newValue: string) => void
   ): void {
     const titleEl = taskElem.querySelector('[data-role="title"]') as HTMLElement;
     const input = document.createElement('input');
+    const oldValue = titleEl.textContent || '';
     input.type = 'text';
-    input.value = taskData.title;
+    input.value = oldValue;
     input.style.width = '100%';
     // Replace the title element with an input field.
     titleEl.replaceWith(input);
     input.focus();
+
+    // TODO: This is a violation of the Single Responsibility Principle.
+    //       This module should only handle the DOM manipulation.
     input.addEventListener('blur', () => {
-      const oldValue = taskData.title;
-      taskData.title = input.value || "Untitled";
+      const newValue = input.value || "Untitled";
       const newTitleEl = document.createElement('div');
       newTitleEl.classList.add('title');
       newTitleEl.setAttribute('data-role', 'title');
-      newTitleEl.textContent = taskData.title;
+      newTitleEl.textContent = newValue;
       input.replaceWith(newTitleEl);
-      onSave(oldValue, taskData.title);
+      onChange(oldValue, newValue);
     });
   }
 
@@ -512,15 +513,14 @@ export const DOMController = (function () {
    * Enables rich-text editing of a task's description using Quill.
    * Replaces the description element with a Quill editor and saves on blur.
    * @param taskElem The task HTMLElement.
-   * @param taskData An object containing the current description and id.
    * @param onSave Callback function invoked after saving with (oldValue, newValue).
    */
   function editTaskDescription(
     taskElem: HTMLElement,
-    taskData: { description: string; id: string },
     onSave: (oldValue: string, newValue: string) => void
   ): void {
     const descEl = taskElem.querySelector('[data-role="description"]') as HTMLElement;
+    const oldValue = descEl.innerHTML;
     const originalDesc = descEl;
     const editorContainer = document.createElement('div');
     const editorElement = document.createElement('div');
@@ -544,13 +544,11 @@ export const DOMController = (function () {
         ],
       },
     });
-    quill.root.innerHTML = taskData.description;
+    quill.root.innerHTML = oldValue;
     quill.focus();
     setTimeout(() => quill.setSelection(quill.getLength(), 0), 0);
 
-    /**
-     * Adjusts the editor's height based on its content.
-     */
+    // Adjust the height of the editor to match the content.
     function adjustHeight(): void {
       const newHeight = quill.root.scrollHeight;
       editorElement.style.height = newHeight + 'px';
@@ -558,66 +556,46 @@ export const DOMController = (function () {
     quill.on('text-change', adjustHeight);
     adjustHeight();
 
-    /**
-     * Saves the new description and replaces the editor with the updated description element.
-     */
-    function saveAndCleanup(): void {
-      const oldValue = taskData.description;
-      taskData.description = quill.root.innerHTML;
-      const newDescEl = document.createElement('div');
-      newDescEl.classList.add('description');
-      newDescEl.setAttribute('data-role', 'description');
-      newDescEl.innerHTML = taskData.description;
-      editorContainer.parentNode?.replaceChild(newDescEl, editorContainer);
-      onSave(oldValue, taskData.description);
-
-      // TODO: Move this listener out of the DOMController
-      document.removeEventListener('click', clickOutsideListener);
-    }
-
-    /**
-     * Listener to detect clicks outside the editor to trigger saving.
-     * @param e The click event.
-     */
+    // Listen for clicks outside the editor to save and cleanup.
+    // TODO: This click listener is a violation of the Single Responsibility Principle.
+    //       This module should only handle the DOM manipulation.
     function clickOutsideListener(e: Event): void {
       if (!editorContainer.contains(e.target as Node)) {
         saveAndCleanup();
       }
     }
+    function saveAndCleanup(): void {
+      const newValue = quill.root.innerHTML;
+      const newDescEl = document.createElement('div');
+      newDescEl.classList.add('description');
+      newDescEl.setAttribute('data-role', 'description');
+      newDescEl.innerHTML = newValue;
+      editorContainer.parentNode?.replaceChild(newDescEl, editorContainer);
+      onSave(oldValue, newValue);
 
-    // TODO: Move this listener out of the DOMController
+      document.removeEventListener('click', clickOutsideListener);
+    }    
     document.addEventListener('click', clickOutsideListener);
   }
 
   /**
-   * Placeholder function to update dependency arrows for a given task.
-   * @param taskId The id of the task.
-   */
-  function updateTaskDependencies(taskId: string): void {
-    // Placeholder: In a full implementation, update dependency arrows related to the task.
-  }
-
-  /**
    * Adds a dependency arrow between two tasks.
-   * @param fromId The id of the source task.
-   * @param toId The id of the target task.
+   * @param requiredTaskElement The task that must be completed first.
+   * @param requiredByTaskElement The task that requires the other.
    * @param options Optional settings for the arrow (color, pzZoomFactor, skipUndo).
    * @returns The created arrow object or undefined if tasks are not found.
    * @throws Error if the canvas is not initialized.
    */
   function addDependency(
-    fromId: string,
-    toId: string,
+    requiredTaskElement: Element,
+    requiredByTaskElement: Element,
     options: { color?: string; pzZoomFactor?: number; skipUndo?: boolean } = {}
   ): any {
     if (!canvas) throw new Error("Canvas not initialized");
-    const fromEl = canvas.querySelector(`.task[data-id="${fromId}"]`) as HTMLElement;
-    const toEl = canvas.querySelector(`.task[data-id="${toId}"]`) as HTMLElement;
-    if (!fromEl || !toEl) return;
     const arrow = DependencyArrow.createArrow(
       canvas,
-      toEl,
-      fromEl,
+      requiredTaskElement,
+      requiredByTaskElement,
       { color: options.color || '#b3b3b3', pzZoomFactor: CustomPanZoom.getScale() }
     );
     canvas.prepend(arrow.svg);
@@ -680,52 +658,46 @@ export const DOMController = (function () {
    * @param ghostArrow The ghost arrow object.
    * @param dependencyCreationFixedTask The fixed task id from which the dependency is created.
    * @param ghostSnapTarget The optional snapping target task id.
-   * @param mousePosition The current mouse position.
+   * @param fallbackScreenPosition The screen position to use if no snap target is found.
    * @throws Error if the canvas is not initialized.
    */
   function updateGhostArrow(
     dependencyCreationMode: string,
     ghostArrow: any,
-    dependencyCreationFixedTask: string,
-    ghostSnapTarget: string | null,
-    mousePosition: { x: number; y: number }
+    dependencyCreationFixedTask: HTMLElement,
+    ghostSnapTarget: HTMLElement | null,
+    fallbackScreenPosition: Vector2D
   ): void {
     if (!canvas) throw new Error("Canvas not initialized");
+  
     const canvasRect = canvas.getBoundingClientRect();
-    if (dependencyCreationMode && ghostArrow) {
-      if (dependencyCreationMode === 'source') {
-        const fixedEl = canvas.querySelector(`.task[data-id="${dependencyCreationFixedTask}"]`) as HTMLElement;
-        if (ghostSnapTarget) {
-          const targetEl = canvas.querySelector(`.task[data-id="${ghostSnapTarget}"]`) as HTMLElement;
-          ghostArrow.update(targetEl, fixedEl, { pzZoomFactor: CustomPanZoom.getScale() });
-          ghostArrow.setColor('#55b38888'); // Valid color
-        }
-        else {
-          ghostArrow.update(
-            { x: mousePosition.x - canvasRect.left, y: mousePosition.y - canvasRect.top },
-            fixedEl,
-            { pzZoomFactor: CustomPanZoom.getScale() }
-          );
-          ghostArrow.setColor('#b3555588'); // Invalid color
-        }
-      }
-      else if (dependencyCreationMode === 'target') {
-        const fixedEl = canvas.querySelector(`.task[data-id="${dependencyCreationFixedTask}"]`) as HTMLElement;
-        if (ghostSnapTarget) {
-          const sourceEl = canvas.querySelector(`.task[data-id="${ghostSnapTarget}"]`) as HTMLElement;
-          ghostArrow.update(fixedEl, sourceEl, { pzZoomFactor: CustomPanZoom.getScale() });
-          ghostArrow.setColor('#55b38888'); // Valid color
-        }
-        else {
-          ghostArrow.update(
-            fixedEl,
-            { x: mousePosition.x - canvasRect.left, y: mousePosition.y - canvasRect.top },
-            { pzZoomFactor: CustomPanZoom.getScale() }
-          );
-          ghostArrow.setColor('#b3555588'); // Invalid color
-        }
-      }
+
+    // TODO: Why are we half converting from screen to canvas space here and the other half (scaling) in the arrow update?
+    const pointer = new Vector2D(
+      fallbackScreenPosition.x - canvasRect.left, 
+      fallbackScreenPosition.y - canvasRect.top 
+    );
+    const zoomFactor = { pzZoomFactor: CustomPanZoom.getScale() };
+    const validColor = '#55b38888';
+    const invalidColor = '#b3555588';
+  
+    if (!dependencyCreationMode || !ghostArrow) return;
+  
+    let start: HTMLElement | Vector2D;
+    let end: HTMLElement | Vector2D;
+  
+    if (dependencyCreationMode === 'source') {
+      start = ghostSnapTarget || pointer;
+      end = dependencyCreationFixedTask;
+    } else if (dependencyCreationMode === 'target') {
+      start = dependencyCreationFixedTask;
+      end = ghostSnapTarget || pointer;
+    } else {
+      return;
     }
+  
+    ghostArrow.update(start, end, zoomFactor);
+    ghostArrow.setColor(ghostSnapTarget ? validColor : invalidColor);
   }
 
   // Expose the public API.
@@ -757,7 +729,6 @@ export const DOMController = (function () {
         adjustTaskZPosition,
         editTaskTitle,
         editTaskDescription,
-        updateTaskDependencies,
         addDependency,
         removeTask,
         removeDependency,
