@@ -93,11 +93,11 @@ interface ControlState {
   /** Holds information about the active context menu */
   contextMenuContext: ContextMenuContext | null;
 
-  /** The mode of dependency creation ('source' or 'target') (encodes the direction of the ghost dependency arrow) */
-  dependencyCreationMode: 'source' | 'target' | null;
-
   /** The task element to which the ghost dependency arrow is fixed */
   dependencyCreationFirstTask: HTMLElement | null;
+
+  /** Indicates the direction of the dependency being created. So `true` means the arrow tip will follow the cursor. */
+  dependencyCreationFirstTaskIsRequired: boolean;
 
   /** The ghost dependency arrow element */
   ghostArrow: any;
@@ -162,8 +162,8 @@ const ControlState: ControlState = {
   selectionBoxStart: new Vector2D(0, 0),
   contextMenuContext: null,
 
-  dependencyCreationMode: null,
   dependencyCreationFirstTask: null,
+  dependencyCreationFirstTaskIsRequired: false,
   ghostArrow: null,
 
   mouseIsHoldingDependencyArrow: false,
@@ -311,9 +311,9 @@ function interpretIntent(): void {
         ghostSnapTarget = potentialTaskElement
       }
       DOMController.updateGhostArrow(
-        ControlState.dependencyCreationMode!,
         ControlState.ghostArrow,
         ControlState.dependencyCreationFirstTask!,
+        ControlState.dependencyCreationFirstTaskIsRequired,
         ghostSnapTarget,
         ControlState.mousePosition
       );
@@ -326,8 +326,8 @@ function interpretIntent(): void {
         if (!(ControlState.dependencyCreationFirstTask instanceof Element)) throw new Error('First task is not an element');
         const firstTask = ControlState.dependencyCreationFirstTask;
         MouseAndKeyboardAppController.onCreateDependency?.({
-          requiredTaskElement: ControlState.dependencyCreationMode === 'source' ? secondTask : firstTask,
-          requiredByTaskElement: ControlState.dependencyCreationMode === 'source' ? firstTask : secondTask
+          requiredTaskElement: ControlState.dependencyCreationFirstTaskIsRequired ? firstTask : secondTask,
+          requiredByTaskElement: ControlState.dependencyCreationFirstTaskIsRequired ? secondTask : firstTask
         });
       }
 
@@ -338,7 +338,6 @@ function interpretIntent(): void {
       }
 
       // Clear dependency creation state.
-      ControlState.dependencyCreationMode = null;
       ControlState.dependencyCreationFirstTask = null;
       ControlState.mouseIsHoldingDependencyArrow = false;
       return;
@@ -353,7 +352,6 @@ function interpretIntent(): void {
         ControlState.ghostArrow.remove();
         ControlState.ghostArrow = null;
       }
-      ControlState.dependencyCreationMode = null;
       ControlState.dependencyCreationFirstTask = null;
       ControlState.mouseIsHoldingDependencyArrow = false;
       return;
@@ -763,17 +761,15 @@ function handleContextMenuSelection(): boolean {
     MouseAndKeyboardAppController.onDeleteTasks?.({ taskElements });
   }
   else if (option === 'REQUIRES_DEPENDENCY') {
-    // For "Requires Dependency", we treat the fixed task as the one to which another task will be attached (mode 'target')
     if (!ControlState.contextMenuContext.taskElement) throw new Error('Task element is null');
-    ControlState.dependencyCreationMode = 'target';
     ControlState.dependencyCreationFirstTask = ControlState.contextMenuContext.taskElement;
+    ControlState.dependencyCreationFirstTaskIsRequired = false;
     tryGrabDependencyArrow();
   }
   else if (option === 'REQUIRED_BY_DEPENDENCY') {
-    // For "Required By Dependency", we treat the fixed task as the one that requires the dependency (mode 'source')
     if (!ControlState.contextMenuContext.taskElement) throw new Error('Task element is null');
-    ControlState.dependencyCreationMode = 'source';
     ControlState.dependencyCreationFirstTask = ControlState.contextMenuContext.taskElement;
+    ControlState.dependencyCreationFirstTaskIsRequired = true;
     tryGrabDependencyArrow();
   }
   else if (option === 'DELETE_DEPENDENCY') {
@@ -902,18 +898,17 @@ function tryGrabDependencyArrow(): boolean {
 
   ControlState.mouseIsHoldingDependencyArrow = true;
   const canvas = DOMController.getCanvas();
-  const fixedEl = ControlState.dependencyCreationFirstTask;
-  if (!fixedEl) return false;
+  const firstTask = ControlState.dependencyCreationFirstTask;
+  if (!firstTask) return false;
+
   const canvasRect = canvas.getBoundingClientRect();
-  const rect = fixedEl.getBoundingClientRect();
+  const rect = firstTask.getBoundingClientRect();
   const fixedPoint = { x: rect.left + rect.width / 2 - canvasRect.left, y: rect.top + rect.height / 2 - canvasRect.top };
-  if (ControlState.dependencyCreationMode === 'target') {
-    // In target mode, ghost arrow goes from the fixed element toward the mouse.
-    ControlState.ghostArrow = DependencyArrow.createArrow(canvas, fixedEl, fixedPoint, { color: "#b3555588", pzZoomFactor: CustomPanZoom.getScale() });
+  if (ControlState.dependencyCreationFirstTaskIsRequired) {
+    ControlState.ghostArrow = DependencyArrow.createArrow(canvas, firstTask, fixedPoint, { color: "#b3555588", pzZoomFactor: CustomPanZoom.getScale() });
   }
-  else if (ControlState.dependencyCreationMode === 'source') {
-    // In source mode, ghost arrow goes from the fixed point to the fixed element.
-    ControlState.ghostArrow = DependencyArrow.createArrow(canvas, fixedPoint, fixedEl, { color: "#b3555588", pzZoomFactor: CustomPanZoom.getScale() });
+  else {
+    ControlState.ghostArrow = DependencyArrow.createArrow(canvas, fixedPoint, firstTask, { color: "#b3555588", pzZoomFactor: CustomPanZoom.getScale() });
   }
   return true;
 }

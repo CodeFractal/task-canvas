@@ -654,17 +654,17 @@ export const DOMController = (function () {
 
   /**
    * Updates the ghost arrow during dependency creation based on mouse position and snapping.
-   * @param dependencyCreationMode Indicates if the ghost arrow is for 'source' or 'target'.
+   * @param firstTaskIsRequiredTask Indicates the direction of the dependency being created. So `true` means the arrow tip will follow the cursor.
    * @param ghostArrow The ghost arrow object.
-   * @param dependencyCreationFixedTask The fixed task id from which the dependency is created.
+   * @param firstTask The task from which the dependency is created.
    * @param ghostSnapTarget The optional snapping target task id.
    * @param fallbackScreenPosition The screen position to use if no snap target is found.
    * @throws Error if the canvas is not initialized.
    */
   function updateGhostArrow(
-    dependencyCreationMode: string,
     ghostArrow: any,
-    dependencyCreationFixedTask: HTMLElement,
+    firstTask: HTMLElement,
+    firstTaskIsRequiredTask: boolean,
     ghostSnapTarget: HTMLElement | null,
     fallbackScreenPosition: Vector2D
   ): void {
@@ -681,19 +681,18 @@ export const DOMController = (function () {
     const validColor = '#55b38888';
     const invalidColor = '#b3555588';
   
-    if (!dependencyCreationMode || !ghostArrow) return;
+    if (!ghostArrow) return;
   
     let start: HTMLElement | Vector2D;
     let end: HTMLElement | Vector2D;
   
-    if (dependencyCreationMode === 'source') {
-      start = ghostSnapTarget || pointer;
-      end = dependencyCreationFixedTask;
-    } else if (dependencyCreationMode === 'target') {
-      start = dependencyCreationFixedTask;
+    if (firstTaskIsRequiredTask) {
+      start = firstTask;
       end = ghostSnapTarget || pointer;
-    } else {
-      return;
+    }
+    else {
+      start = ghostSnapTarget || pointer;
+      end = firstTask;
     }
   
     ghostArrow.update(start, end, zoomFactor);

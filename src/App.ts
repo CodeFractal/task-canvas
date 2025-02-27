@@ -228,8 +228,7 @@ appController.onMoveTasks = (data: ac.IntentData_MoveTasks) => {
         const fromEl = document.querySelector(`.task[data-id="${dep.from}"]`) as HTMLElement;
         const toEl = document.querySelector(`.task[data-id="${dep.to}"]`) as HTMLElement;
         if (fromEl && toEl) {
-            // Arrow was created with (toEl, fromEl); update accordingly.
-            dep.arrow.update(toEl, fromEl, { pzZoomFactor: CustomPanZoom.getScale() });
+            dep.arrow.update(fromEl, toEl, { pzZoomFactor: CustomPanZoom.getScale() });
         }
     });
 };
