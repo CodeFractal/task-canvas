@@ -5,8 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "esbuild --bundle src/App.ts --outfile=dist/app.js --sourcemap --minify",
-    "watch": "esbuild --bundle src/App.ts --outfile=dist/app.js --sourcemap --watch"
+    "build": "esbuild --bundle src/Startup.ts --outfile=dist/app.js --sourcemap --minify",
+    "watch": "esbuild --bundle src/Startup.ts --outfile=dist/app.js --sourcemap --watch"
   },
   "keywords": [],
   "author": "",

@@ -6,6 +6,8 @@
  * @module DependencyArrow
  */
 
+import { Rectangle, Vector2D } from "../Abstract/Math";
+
 /**
  * Represents the options available when creating an arrow.
  */
@@ -14,25 +16,16 @@ interface ArrowOptions {
     color?: string;
     /** The grid size used for routing calculations. */
     gridSize?: number;
-    /** The zoom factor (if the parent is zoomed by a library like panzoom). */
-    pzZoomFactor?: number;
     /** Whether to skip creating an undo action (not used here but available for external usage). */
     skipUndo?: boolean;
+    /** The data-id attribute value for the arrow (not used here but available for external usage). */
+    dataId?: string;
 }
 
-/**
- * Represents a point in 2D space.
- */
-interface Point {
-    x: number;
-    y: number;
-}
-
-// TODO: Make ArrowHandler an exported class
 /**
  * Represents the methods available on an arrow handler.
  */
-interface ArrowHandler {
+export interface ArrowHandler {
     /** The SVG element containing the arrow path. */
     svg: SVGSVGElement;
     /**
@@ -47,7 +40,7 @@ interface ArrowHandler {
      * @param newEnd The new end point or HTML element.
      * @param options Additional options (particularly the updated zoom factor).
      */
-    update: (newStart: any, newEnd: any, options?: { pzZoomFactor?: number }) => void;
+    update: (newStart: Vector2D | Rectangle, newEnd: Vector2D | Rectangle) => void;
     /**
      * Remove the arrow from the DOM.
      */
@@ -90,27 +83,19 @@ export const DependencyArrow = (function () {
      * 
      * @param input The endpoint which can be an HTMLElement or a Point-like object.
      * @param role The role of the endpoint, either 'start' or 'end'.
-     * @param parent The container in which coordinates will be measured.
-     * @param pzZoomFactor The current zoom factor of the parent.
      * @returns A resolved Point in the parent's coordinate system.
      */
     function resolveEndpoint(
-        input: any,
-        role: 'start' | 'end',
-        parent: HTMLElement,
-        pzZoomFactor: number
-    ): Point {
-        if (input instanceof HTMLElement) {
-            const bounds = getElementBounds(input, parent, pzZoomFactor);
+        input: Vector2D | Rectangle,
+        role: 'start' | 'end'
+    ): Vector2D {
+        if (input instanceof Rectangle) {
             return role === "start"
-                ? { x: bounds.right, y: bounds.top + 20 }
-                : { x: bounds.left, y: bounds.top + 20 };
+                ? input.position.translate(input.size.x, 20)
+                : input.position.translate(0, 20);
         }
         else {
-            return {
-                x: input.x / pzZoomFactor,
-                y: input.y / pzZoomFactor
-            };
+            return input;
         }
     }
 
@@ -126,29 +111,6 @@ export const DependencyArrow = (function () {
     function computeVerticalX(sx: number, ex: number, gridSize: number): number {
         const mid = (sx + ex) / 2;
         return Math.round(mid / gridSize) * gridSize;
-    }
-
-    /**
-     * Get the bounding box of an element relative to a parent element.
-     * 
-     * @param element The HTMLElement to measure.
-     * @param parent The parent element in which coordinates are measured.
-     * @param pzZoomFactor The current zoom factor.
-     * @returns The bounding box in the parent's coordinate space.
-     */
-    function getElementBounds(
-        element: HTMLElement,
-        parent: HTMLElement,
-        pzZoomFactor: number
-    ): { top: number; bottom: number; left: number; right: number } {
-        const parentRect = parent.getBoundingClientRect();
-        const rect = element.getBoundingClientRect();
-        return {
-            top: (rect.top - parentRect.top) / pzZoomFactor,
-            bottom: (rect.bottom - parentRect.top) / pzZoomFactor,
-            left: (rect.left - parentRect.left) / pzZoomFactor,
-            right: (rect.right - parentRect.left) / pzZoomFactor,
-        };
     }
 
     /**
@@ -178,21 +140,17 @@ export const DependencyArrow = (function () {
      * @param gridSize The grid size for snapping coordinates.
      * @param startElem The start element or coordinate input.
      * @param endElem The end element or coordinate input.
-     * @param parent The parent container element.
-     * @param pzZoomFactor The current zoom factor.
      * @returns An array of points describing the route, or undefined if the route can't be computed.
      */
     function computeRoute(
-        S: Point,
-        E: Point,
+        S: Vector2D,
+        E: Vector2D,
         gridSize: number,
-        startElem: any,
-        endElem: any,
-        parent: HTMLElement,
-        pzZoomFactor: number
-    ): Point[] | undefined {
+        startElem: Vector2D | Rectangle,
+        endElem: Vector2D | Rectangle
+    ): Vector2D[] | undefined {
         const minHorizontal = 10;
-        let route: Point[] | undefined;
+        let route: Vector2D[] | undefined;
 
         // Normal route
         if (S.x <= E.x && (E.x - S.x >= 2 * minHorizontal)) {
@@ -205,17 +163,17 @@ export const DependencyArrow = (function () {
                 const X_mid = computeVerticalX(X_start, X_end, gridSize);
                 route = [
                     S,
-                    { x: X_start, y: S.y },
-                    { x: X_mid, y: S.y },
-                    { x: X_mid, y: E.y },
-                    { x: X_end, y: E.y },
+                    new Vector2D(X_start, S.y),
+                    new Vector2D(X_mid, S.y),
+                    new Vector2D(X_mid, E.y),
+                    new Vector2D(X_end, E.y),
                     E,
                 ];
             } else if (X_start === X_end) {
                 route = [
                     S,
-                    { x: X_start, y: S.y },
-                    { x: X_start, y: E.y },
+                    new Vector2D(X_start, S.y),
+                    new Vector2D(X_start, E.y),
                     E
                 ];
             }
@@ -226,21 +184,21 @@ export const DependencyArrow = (function () {
             const X1 = Math.ceil((S.x + minHorizontal) / gridSize) * gridSize;
             const X_final = Math.floor((E.x - minHorizontal) / gridSize) * gridSize;
             const effectiveStartY =
-                startElem instanceof HTMLElement
-                    ? getElementBounds(startElem, parent, pzZoomFactor).bottom
+                startElem instanceof Rectangle
+                    ? startElem.bottom
                     : S.y;
             const effectiveEndY =
-                endElem instanceof HTMLElement
-                    ? getElementBounds(endElem, parent, pzZoomFactor).top
+                endElem instanceof Rectangle
+                    ? endElem.top
                     : E.y;
             const Y_mid = Math.round(((effectiveStartY + effectiveEndY) / 2) / gridSize) * gridSize;
 
             route = [
                 S,
-                { x: X1, y: S.y },
-                { x: X1, y: Y_mid },
-                { x: X_final, y: Y_mid },
-                { x: X_final, y: E.y },
+                new Vector2D(X1, S.y),
+                new Vector2D(X1, Y_mid),
+                new Vector2D(X_final, Y_mid),
+                new Vector2D(X_final, E.y),
                 E,
             ];
         }
@@ -249,7 +207,7 @@ export const DependencyArrow = (function () {
         if (route.length > 0) {
             const last = route[route.length - 1];
             if (last.x === E.x) {
-                route[route.length - 1] = { x: last.x - ARROW_THICKNESS, y: last.y };
+                route[route.length - 1] = last.translate(-ARROW_THICKNESS, 0);
             }
         }
         return route;
@@ -262,42 +220,16 @@ export const DependencyArrow = (function () {
      * @param margin The margin to expand around the min/max coordinates.
      * @returns The bounding box with left, top, width, and height properties.
      */
-    function computeBoundingBox(points: Point[], margin: number): { left: number; top: number; width: number; height: number } {
+    function computeBoundingBox(points: Vector2D[], margin: number): Rectangle {
         const xs = points.map((p) => p.x);
         const ys = points.map((p) => p.y);
         const minX = Math.min(...xs);
         const minY = Math.min(...ys);
         const maxX = Math.max(...xs);
         const maxY = Math.max(...ys);
-        return {
-            left: minX - margin,
-            top: minY - margin,
-            width: (maxX - minX) + 2 * margin,
-            height: (maxY - minY) + 2 * margin,
-        };
-    }
-
-    /**
-     * Determine whether a point lies strictly within an element's bounding box.
-     * 
-     * @param coord The point to test (in the parent coordinate space).
-     * @param element The HTMLElement.
-     * @param parent The parent container element.
-     * @param pzZoomFactor The current zoom factor.
-     * @returns True if the point is inside the element, false otherwise.
-     */
-    function isPointInsideElement(
-        coord: Point,
-        element: HTMLElement,
-        parent: HTMLElement,
-        pzZoomFactor: number
-    ): boolean {
-        const bounds = getElementBounds(element, parent, pzZoomFactor);
-        return (
-            coord.x > bounds.left &&
-            coord.x < bounds.right &&
-            coord.y > bounds.top &&
-            coord.y < bounds.bottom
+        return new Rectangle(
+            new Vector2D(minX - margin, minY - margin),
+            new Vector2D((maxX - minX) + 2 * margin, (maxY - minY) + 2 * margin)
         );
     }
 
@@ -307,9 +239,9 @@ export const DependencyArrow = (function () {
      * @param points The array of points.
      * @returns A new array with duplicates removed.
      */
-    function removeDuplicatePoints(points: Point[]): Point[] {
+    function removeDuplicatePoints(points: Vector2D[]): Vector2D[] {
         if (!points.length) return points;
-        const newPoints: Point[] = [points[0]];
+        const newPoints: Vector2D[] = [points[0]];
         for (let i = 1; i < points.length; i++) {
             const last = newPoints[newPoints.length - 1];
             if (points[i].x !== last.x || points[i].y !== last.y) {
@@ -327,7 +259,7 @@ export const DependencyArrow = (function () {
      * @param radius The desired corner radius.
      * @returns A string usable as the 'd' attribute of an SVG path.
      */
-    function createRoundedPath(points: Point[], radius: number): string {
+    function createRoundedPath(points: Vector2D[], radius: number): string {
         // Remove consecutive duplicate points.
         points = removeDuplicatePoints(points);
 
@@ -343,16 +275,16 @@ export const DependencyArrow = (function () {
         // This interface helps hold corner rounding information.
         interface Arc {
             arc: boolean;
-            center: Point;
-            from: Point;
-            to: Point;
+            center: Vector2D;
+            from: Vector2D;
+            to: Vector2D;
             r: number;
-            u1: Point;
-            u2: Point;
+            u1: Vector2D;
+            u2: Vector2D;
             theta: number;
         }
 
-        const roundedPoints: (Point | Arc)[] = [points[0]];
+        const roundedPoints: (Vector2D | Arc)[] = [points[0]];
 
         // Build a set of points & arcs that represent the path with rounded corners.
         for (let i = 1; i < points.length - 1; i++) {
@@ -360,8 +292,8 @@ export const DependencyArrow = (function () {
             const next = points[i + 1];
 
             // Vectors for incoming and outgoing segments.
-            const v1 = { x: current.x - prevPoint.x, y: current.y - prevPoint.y };
-            const v2 = { x: next.x - current.x, y: next.y - current.y };
+            const v1 = current.sub(prevPoint);
+            const v2 = next.sub(current);
 
             // If segments are collinear, no rounding is needed.
             if ((v1.x === 0 && v2.x === 0) || (v1.y === 0 && v2.y === 0)) {
@@ -370,16 +302,13 @@ export const DependencyArrow = (function () {
                 continue;
             }
 
-            const len1 = Math.hypot(v1.x, v1.y);
-            const len2 = Math.hypot(v2.x, v2.y);
-
             // Normalize the directions.
-            const u1 = { x: v1.x / len1, y: v1.y / len1 };
-            const u2 = { x: v2.x / len2, y: v2.y / len2 };
+            const u1 = v1.normalize();
+            const u2 = v2.normalize();
 
             // Dot product to find angle at the corner.
-            const inDir = { x: -u1.x, y: -u1.y }; // direction coming into the corner
-            const dot = inDir.x * u2.x + inDir.y * u2.y;
+            const inDir = u1.negate(); // direction coming into the corner
+            const dot = inDir.dot(u2);
             const clampedDot = Math.min(1, Math.max(-1, dot));
             const theta = Math.acos(clampedDot);
             if (theta === 0) {
@@ -391,18 +320,14 @@ export const DependencyArrow = (function () {
             // Ideal offset along each segment to produce the desired radius.
             const d_required = radius / Math.tan(theta / 2);
             // Clamp the offset to the available segment lengths.
+            const len1 = Math.sqrt(v1.lenSqr());
+            const len2 = Math.sqrt(v2.lenSqr());
             const d_eff = Math.min(d_required, len1, len2);
             const r_eff = d_eff * Math.tan(theta / 2);
 
             // Compute the tangent points around this corner.
-            const pEntry = {
-                x: current.x - u1.x * d_eff,
-                y: current.y - u1.y * d_eff
-            };
-            const pExit = {
-                x: current.x + u2.x * d_eff,
-                y: current.y + u2.y * d_eff
-            };
+            const pEntry = current.sub(u1.mul(d_eff));
+            const pExit = current.add(u2.mul(d_eff));
 
             // Push the entry tangent, the arc info, and the exit tangent.
             roundedPoints.push(pEntry);
@@ -425,7 +350,7 @@ export const DependencyArrow = (function () {
         roundedPoints.push(points[points.length - 1]);
 
         // Now construct the SVG path string from our line/arc descriptors.
-        const firstPoint = roundedPoints[0] as Point;
+        const firstPoint = roundedPoints[0] as Vector2D;
         d = `M ${firstPoint.x},${firstPoint.y}`;
         for (let i = 1; i < roundedPoints.length; i++) {
             const ptOrArc = roundedPoints[i];
@@ -435,7 +360,7 @@ export const DependencyArrow = (function () {
                 continue;
             }
 
-            const pt = ptOrArc as Point;
+            const pt = ptOrArc as Vector2D;
 
             // If the next chunk is an arc, then line up to the arc start and build the arc command.
             if (i < roundedPoints.length - 1 && (roundedPoints[i + 1] as Arc).arc) {
@@ -468,13 +393,12 @@ export const DependencyArrow = (function () {
          */
         createArrow: function (
             parent: HTMLElement,
-            start: any,
-            end: any,
+            start: Vector2D | Rectangle,
+            end: Vector2D | Rectangle,
             options: ArrowOptions = {}
         ): ArrowHandler {
             options = options || {};
             const gridSize = options.gridSize || DEFAULT_GRID_SIZE;
-            const pzZoomFactor = options.pzZoomFactor || 1;
             const margin = DEFAULT_MARGIN;
             arrowCounter++;
 
@@ -482,25 +406,25 @@ export const DependencyArrow = (function () {
             const svgNS = 'http://www.w3.org/2000/svg';
 
             // Resolve endpoints (convert from HTML elements or raw points to normalized Points).
-            let S = resolveEndpoint(start, 'start', parent, pzZoomFactor);
-            let E = resolveEndpoint(end, 'end', parent, pzZoomFactor);
+            let S = resolveEndpoint(start, 'start');
+            let E = resolveEndpoint(end, 'end');
 
             // Check for "invalid" conditions: if one endpoint lies inside the other's element.
             let invalid = false;
-            if (start instanceof HTMLElement) {
-                if (isPointInsideElement(E, start, parent, pzZoomFactor)) {
+            if (start instanceof Rectangle) {
+                if (start.contains(E)) {
                     invalid = true;
                 }
             }
-            if (end instanceof HTMLElement) {
-                if (isPointInsideElement(S, end, parent, pzZoomFactor)) {
+            if (end instanceof Rectangle) {
+                if (end.contains(S)) {
                     invalid = true;
                 }
             }
 
             // Compute the route the arrow will take. 
             // If none is possible, we'll mark the arrow invalid and hide it.
-            const routePoints = computeRoute(S, E, gridSize, start, end, parent, pzZoomFactor);
+            const routePoints = computeRoute(S, E, gridSize, start, end);
             if (!routePoints) {
                 invalid = true;
             }
@@ -517,7 +441,13 @@ export const DependencyArrow = (function () {
             svg.style.height = bbox.height + 'px';
             svg.style.overflow = 'visible';
             svg.style.pointerEvents = 'none';
+            svg.dataset.role = 'dependency-arrow';
             parent.appendChild(svg);
+
+            // Set the data-id attribute if provided.
+            if (options.dataId) {
+                svg.dataset.id = options.dataId;
+            }
 
             // Create a unique marker element (arrowhead) for this arrow instance.
             const markerId = 'arrowhead-' + arrowCounter;
@@ -539,16 +469,13 @@ export const DependencyArrow = (function () {
             svg.appendChild(defs);
 
             // Convert the route points from global parent coords to the local SVG coordinate system.
-            let localPoints: Point[];
+            let localPoints: Vector2D[];
             if (routePoints) {
-                localPoints = routePoints.map((p) => ({
-                    x: p.x - bbox.left,
-                    y: p.y - bbox.top
-                }));
+                localPoints = routePoints.map(p => p.sub(bbox.position));
             } else {
                 localPoints = [
-                    { x: S.x - bbox.left, y: S.y - bbox.top },
-                    { x: E.x - bbox.left, y: E.y - bbox.top }
+                    S.sub(bbox.position),
+                    E.sub(bbox.position)
                 ];
             }
 
@@ -580,21 +507,19 @@ export const DependencyArrow = (function () {
                  * 
                  * @param newStart The new start point or HTML element.
                  * @param newEnd The new end point or HTML element.
-                 * @param options Additional options (e.g., new zoom factor).
                  */
-                update: function (newStart: any, newEnd: any, options: { pzZoomFactor?: number } = {}) {
-                    const pzZoomFactor = options.pzZoomFactor || 1;
-                    const S_new = resolveEndpoint(newStart, 'start', parent, pzZoomFactor);
-                    const E_new = resolveEndpoint(newEnd, 'end', parent, pzZoomFactor);
+                update: function (newStart: Vector2D | Rectangle, newEnd: Vector2D | Rectangle) {
+                    const S_new = resolveEndpoint(newStart, 'start');
+                    const E_new = resolveEndpoint(newEnd, 'end');
 
                     let nowInvalid = false;
-                    if (newStart instanceof HTMLElement) {
-                        if (isPointInsideElement(E_new, newStart, parent, pzZoomFactor)) {
+                    if (newStart instanceof Rectangle) {
+                        if (newStart.contains(E_new)) {
                             nowInvalid = true;
                         }
                     }
-                    if (newEnd instanceof HTMLElement) {
-                        if (isPointInsideElement(S_new, newEnd, parent, pzZoomFactor)) {
+                    if (newEnd instanceof Rectangle) {
+                        if (newEnd.contains(S_new)) {
                             nowInvalid = true;
                         }
                     }
@@ -604,9 +529,7 @@ export const DependencyArrow = (function () {
                         E_new,
                         gridSize,
                         newStart,
-                        newEnd,
-                        parent,
-                        pzZoomFactor
+                        newEnd
                     );
                     if (!newRoute) nowInvalid = true;
 
@@ -619,13 +542,10 @@ export const DependencyArrow = (function () {
 
                     // Adjust the path coordinates to the new local origin (the top-left of newBbox).
                     const newLocalPoints = newRoute
-                        ? newRoute.map((p) => ({
-                            x: p.x - newBbox.left,
-                            y: p.y - newBbox.top
-                        }))
+                        ? newRoute.map(p => p.sub(newBbox.position))
                         : [
-                            { x: S_new.x - newBbox.left, y: S_new.y - newBbox.top },
-                            { x: E_new.x - newBbox.left, y: E_new.y - newBbox.top },
+                            S_new.sub(newBbox.position),
+                            E_new.sub(newBbox.position),
                         ];
 
                     // Rebuild the path data and toggle visibility based on validity.
