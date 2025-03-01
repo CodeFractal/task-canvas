@@ -1,9 +1,15 @@
-import { CanvasCoords, ScreenCoords } from "../Presenter/CoordinateSystem";
+import { CanvasCoords, ScreenCoords, SizeOnScreen } from "../Presenter/CoordinateSystem";
 import { IDependency } from "./IDependency";
 import { ITask } from "./ITask";
 
 /** Represents the presenter layer of the application */
 export interface IPresenter {
+
+    /**
+     * Pans the canvas by the specified amount.
+     * @param delta The amount to pan the canvas by.
+     */
+    panCanvas(delta: SizeOnScreen): void;
     
     /**
      * Gets the current position of a task element in canvas space.

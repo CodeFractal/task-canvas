@@ -50,12 +50,11 @@ export class ScreenCoords {
 
     /** Converts the screen coordinates to canvas coordinates */
     public toCanvasCoords(): CanvasCoords {
-        const scale = CustomPanZoom.getScale ? CustomPanZoom.getScale() : 1;
-        const translateX = CustomPanZoom.getTranslateX ? CustomPanZoom.getTranslateX() : 0;
-        const translateY = CustomPanZoom.getTranslateY ? CustomPanZoom.getTranslateY() : 0;
+        const scale = CustomPanZoom.getScale();
+        const translation = CustomPanZoom.getTranslation();
         return CanvasCoords.new(
-          (this.x - translateX) / scale,
-          (this.y - translateY) / scale,
+          (this.x - translation.x) / scale,
+          (this.y - translation.y) / scale,
         );
     }
 }
@@ -191,11 +190,10 @@ export class CanvasCoords {
     /** Converts the canvas coordinates to screen coordinates */
     public toScreenCoords(): ScreenCoords {
         const scale = CustomPanZoom.getScale ? CustomPanZoom.getScale() : 1;
-        const translateX = CustomPanZoom.getTranslateX ? CustomPanZoom.getTranslateX() : 0;
-        const translateY = CustomPanZoom.getTranslateY ? CustomPanZoom.getTranslateY() : 0;
+        const translation = CustomPanZoom.getTranslation();
         return ScreenCoords.new(
-          this.x * scale + translateX,
-          this.y * scale + translateY,
+          this.x * scale + translation.x,
+          this.y * scale + translation.y,
         );
     }
 }

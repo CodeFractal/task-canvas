@@ -29,6 +29,7 @@ export class ControlStateManager {
   public dependencyCreationContext: DependencyCreationContext | null = null;
   public taskTitleEditContext: TaskTitleEditContext | null = null;
   public taskDescriptionEditContext: TaskDescriptionEditContext | null = null;
+  public canvasPanningContext: CanvasPanningContext | null = null;
   public mouseIsHoldingDependencyArrow: boolean = false;
   public mouseIsHoldingSingleTask: boolean = false;
   public mouseIsHoldingTaskGroup: boolean = false;
@@ -75,4 +76,12 @@ export interface TaskDescriptionEditContext {
   task: ITask;
   /** The original description of the task */
   originalDescription: string;
+}
+
+/** Holds context for a canvas panning operation. */
+export interface CanvasPanningContext {
+  /** The original position of the canvas */
+  originalPosition: CanvasCoords;
+  /** The original position of the mouse */
+  originalMousePosition: ScreenCoords;
 }

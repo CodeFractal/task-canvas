@@ -109,6 +109,10 @@ export class AppController {
     this.interpretIntent();
   }
 
+  //--------------------------------------------------------------------------------------------
+  // Intent Interpretation
+  //--------------------------------------------------------------------------------------------
+
   /** Interprets the current intent based on the latest event and control state. */
   private interpretIntent(): void {
     const e = this.controlState.lastEvent;
@@ -181,7 +185,8 @@ export class AppController {
     // Special State: Holding Canvas (Panning)
     if (this.controlState.mouseIsHoldingCanvas) {
       if (e.type === 'mousemove') {
-        // (Panning would be implemented here.)
+        const movement = this.controlState.mouseMovement;
+        this.presenter.panCanvas(movement);
       }
       else if (e.type === 'mouseup' && (e as MouseEvent).button === 2) {
         this.controlState.mouseIsHoldingCanvas = false;
@@ -622,6 +627,10 @@ export class AppController {
     return; // End of interpretIntent.
   }
 
+  //--------------------------------------------------------------------------------------------
+  // Context Menu Selection
+  //--------------------------------------------------------------------------------------------
+
   /** Handles a selection made from a context menu.
    * @returns true if an option was selected, false otherwise
    */
@@ -674,6 +683,10 @@ export class AppController {
 
     return option != null;
   }
+
+  //--------------------------------------------------------------------------------------------
+  // Holding and Releasing Objects
+  //--------------------------------------------------------------------------------------------
 
   /** Checks whether the mouse is currently holding any object.
    * @returns true if something is held, false otherwise

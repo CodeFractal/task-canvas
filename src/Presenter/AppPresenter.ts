@@ -3,7 +3,7 @@ import { CustomPanZoom } from './CustomPanZoom';
 import { IControllerPresenter, Arrow, TaskComponent } from '../Interfaces/IPresenter';
 import { ITask } from '../Interfaces/ITask';
 import { IDependency } from '../Interfaces/IDependency';
-import { CanvasCoords, CanvasRect, ScreenCoords, ScreenRect } from './CoordinateSystem';
+import { CanvasCoords, CanvasRect, ScreenCoords, ScreenRect, SizeOnScreen } from './CoordinateSystem';
 import { Rectangle, Vector2D } from '../Abstract/Math';
 
 declare var Quill: any;
@@ -47,6 +47,10 @@ export class AppPresenter implements IControllerPresenter {
   //────────────────────────────────────────────────────────────
   // IPresenter methods (using ITask where appropriate)
   //────────────────────────────────────────────────────────────
+
+  panCanvas(delta: SizeOnScreen): void {
+    CustomPanZoom.panBy(delta.vec);
+  }
 
   getTaskPositionOnCanvas(task: ITask): CanvasCoords {
     const elem = this.getTaskElement(task);
@@ -94,12 +98,11 @@ export class AppPresenter implements IControllerPresenter {
     let x = Math.min(start.x, end.x);
     let y = Math.min(start.y, end.y);
     // Get current scale and translation from the pan/zoom module.
-    const scale = CustomPanZoom.getScale ? CustomPanZoom.getScale() : 1;
-    const translateX = CustomPanZoom.getTranslateX ? CustomPanZoom.getTranslateX() : 0;
-    const translateY = CustomPanZoom.getTranslateY ? CustomPanZoom.getTranslateY() : 0;
+    const scale = CustomPanZoom.getScale();
+    const translation = CustomPanZoom.getTranslation();
     // Adjust coordinates for canvas translation and scale.
-    x = (x - translateX) / scale;
-    y = (y - translateY) / scale;
+    x = (x - translation.x) / scale;
+    y = (y - translation.y) / scale;
     // Calculate the width and height of the selection box.
     let width = Math.abs(start.x - end.x) / scale;
     let height = Math.abs(start.y - end.y) / scale;

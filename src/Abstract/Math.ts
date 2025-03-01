@@ -88,6 +88,10 @@ export class Rectangle {
         return this.size.y;
     }
 
+    public scale(scalar: number, eigenpoint: Vector2D): Rectangle {
+        return new Rectangle(this.position.sub(eigenpoint).mul(scalar).add(eigenpoint), this.size.mul(scalar));
+    }
+
     public contains(point: Vector2D): boolean {
         return point.x >= this.left && point.x <= this.right && point.y >= this.top && point.y <= this.bottom;
     }
