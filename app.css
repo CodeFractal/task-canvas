@@ -1,0 +1,168 @@
+body {
+    margin: 0;
+    overflow: hidden;
+    background: #121212;
+    color: #fff;
+    font-family: "Helvetica";
+    font-size: 12px;
+    user-select: none;
+}
+
+/* The canvas is a large container we pan/zoom.
+    Grid lines every 40px via background gradients. */
+#canvas {
+    position: relative;
+    width: 10000px;
+    height: 10000px;
+    background-color: #121212;
+    background-image:
+        linear-gradient(90deg, #444 1px, transparent 1px),
+        linear-gradient(180deg, #444 1px, transparent 1px);
+    background-size: 40px 40px;
+    touch-action: none;
+    cursor: grab;
+}
+
+#canvas:active {
+    cursor: grabbing;
+}
+
+/* Task styling */
+.task {
+    position: absolute;
+    width: 240px;
+    background: #333;
+    outline: 2px solid #4d4d4d;
+    outline-offset: 0px;
+    border-radius: 6px;
+    box-sizing: border-box;
+    touch-action: none;
+}
+
+.task-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: #ccc;
+    font-size: 12px;
+    height: 40px;
+    padding: 0 0 0 10px;
+}
+    .task-header > .toggle {
+        width: 16px;
+        height: 16px;
+        cursor: pointer;
+        margin-right: 10px;
+    }
+    .task-header > .title {
+        flex-grow: 1;
+        text-align: center;
+        outline: none;
+        cursor: default;
+    }
+    .task-header > input[type="text"] {
+        background: none;
+        border: none;
+        color: #ccc;
+        text-align: center;
+        font-size: 12px;
+        width: 100%;
+        outline: none;
+    }
+    .task-header > .custom-checkbox {
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      margin: 6px;
+    }
+        .task-header > .custom-checkbox > .checkbox-fill {
+        width: 28px;
+        height: 28px;
+        }
+
+.description {
+    cursor: text;
+    white-space: pre-wrap;
+    line-height: 1.4;
+    overflow-y: auto;
+    outline: 2px solid #4d4d4d;
+    outline-offset: -1px;
+    margin-inline: -1px;
+    margin-bottom: 10px;
+}
+
+.editor-container {
+    border: 2px solid #4d4d4d;
+    border-left: none;
+    border-right: none;
+    margin-bottom: 10px;
+}
+
+.description,
+.ql-editor {
+    background-color: #1a1a1a;
+    font-size: 12px;
+    padding: 10px 15px 10px 15px;
+}
+    .description p,
+    .ql-editor p {
+        margin: 2px 0;
+    }
+
+
+/* Custom context menus */
+#contextMenu,
+#taskContextMenu,
+#dependencyContextMenu {
+    position: absolute;
+    background: #333;
+    color: #fff;
+    padding: 5px;
+    border: 1px solid #555;
+    z-index: 10000;
+    font-size: 14px;
+    display: none;
+}
+
+#contextMenu div,
+#taskContextMenu div,
+#dependencyContextMenu div {
+    padding: 4px 8px;
+    cursor: pointer;
+}
+
+#contextMenu div:hover,
+#taskContextMenu div:hover,
+#dependencyContextMenu div:hover {
+    background: #555;
+}
+
+/* Override Quill Snow theme for our dark styling */
+.ql-toolbar.ql-snow {
+    background-color: #2e2e2e;
+    border: none;
+}
+
+.ql-container.ql-snow {
+    background-color: #2e2e2e;
+    border: none;
+    color: #fff;
+}
+
+.ql-editor {
+    color: #fff;
+    overflow-y: hidden;
+}
+
+.ql-toolbar.ql-snow button .ql-stroke,
+.ql-toolbar.ql-snow .ql-picker .ql-stroke {
+    stroke: #aaa;
+}
+
+.ql-toolbar.ql-snow button .ql-fill,
+.ql-toolbar.ql-snow .ql-picker .ql-fill {
+    fill: #aaa;
+}
