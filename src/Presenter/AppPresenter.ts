@@ -5,6 +5,7 @@ import { ITask } from '../Interfaces/ITask';
 import { IDependency } from '../Interfaces/IDependency';
 import { CanvasCoords, CanvasRect, ScreenCoords, ScreenRect, SizeOnScreen } from './CoordinateSystem';
 import { Rectangle, Vector2D } from '../Abstract/Math';
+import { ModalDialog } from './ModalDialog';
 
 declare var Quill: any;
 
@@ -14,20 +15,20 @@ declare var Quill: any;
  * and drawing selection boxes and context menus.
  */
 export class AppPresenter implements IControllerPresenter {
-  private orderedTasks: { id: string; element: HTMLElement; position: { x: number; y: number } }[] = [];
+  private orderedTasks: { id: number; element: HTMLElement; position: { x: number; y: number } }[] = [];
   private canvas: HTMLElement | null = null;
-  private didInit: boolean = false;
   private selectionBoxElement: HTMLElement | null = null;
   private contextMenuElement: HTMLElement | null = null;
+  private modalScreen: HTMLElement;
+  private modalDialogElement: HTMLElement;
 
   // Mapping from task ID to its ITask and DOM element.
-  private taskMap: Map<string, { task: ITask; element: HTMLElement }> = new Map();
+  private taskMap: Map<number, { task: ITask; element: HTMLElement }> = new Map();
 
   // Mapping from dependency key to its wrapped arrow.
   private dependencyMap: Map<string, ArrowWrapper> = new Map();
 
   constructor() {
-    if (this.didInit) return;
     // Get the canvas element.
     this.canvas = document.getElementById('canvas') as HTMLElement;
     CustomPanZoom.init(this.canvas);
@@ -41,12 +42,51 @@ export class AppPresenter implements IControllerPresenter {
       this.contextMenuElement.style.display = 'none';
       document.body.appendChild(this.contextMenuElement);
     }
-    this.didInit = true;
+
+    // Add modal screen to DOM
+    const modalScreen = document.createElement('div');
+    modalScreen.id = 'modalScreen';
+    modalScreen.style.position = 'fixed';
+    modalScreen.style.inset = '0';
+    modalScreen.style.backgroundColor = 'rgba(0,0,0,0.5)';
+    modalScreen.style.display = 'none';
+    modalScreen.style.zIndex = '1000';
+    document.body.appendChild(modalScreen);
+
+    // Add modal dialog to DOM
+    this.modalDialogElement = ModalDialog.makeHtmlElement();
+    this.modalDialogElement.style.zIndex = '1001';
+    document.body.appendChild(this.modalDialogElement);
+
+    this.modalScreen = modalScreen;
   }
 
   //────────────────────────────────────────────────────────────
   // IPresenter methods (using ITask where appropriate)
   //────────────────────────────────────────────────────────────
+
+  pauseCanvas(): void {
+    this.modalScreen.style.display = 'block';
+  }
+
+  unpauseCanvas(): void {
+    this.modalScreen.style.display = 'none';    
+  }
+
+  showModal(title: string, message: string, options: [string, string][]): Promise<string> {
+    return new Promise((resolve) => {
+      const dialog = new ModalDialog(this.modalDialogElement, {
+        title,
+        message,
+        options,
+        allowClose: false,
+        onSelection: button => {
+          resolve(button);
+        }
+      });
+      dialog.show();
+    });
+  }
 
   panCanvas(delta: SizeOnScreen): void {
     CustomPanZoom.panBy(delta.vec);
@@ -132,7 +172,8 @@ export class AppPresenter implements IControllerPresenter {
     taskElements.forEach((taskEl) => {
       const taskRect = ScreenRect.fromElementBounds(taskEl);
       if (selectionRect.intersects(taskRect)) {
-        const id = taskEl.getAttribute('data-id');
+        const idString = taskEl.getAttribute('data-id');
+        const id = idString ? parseInt(idString) : null;
         if (id && this.taskMap.has(id)) {
           tasksInArea.push(this.taskMap.get(id)!.task);
         }
@@ -170,7 +211,7 @@ export class AppPresenter implements IControllerPresenter {
     if (!this.canvas) throw new Error("Canvas not initialized");
     const eTask = document.createElement('div');
     eTask.classList.add('task');
-    eTask.setAttribute('data-id', task.getId());
+    eTask.setAttribute('data-id', task.getId().toString());
     const pos = task.getPosition();
     if (pos) {
       eTask.style.left = pos.x + 'px';
@@ -266,7 +307,7 @@ export class AppPresenter implements IControllerPresenter {
       this.orderedTasks = this.orderedTasks.filter((t) => t.element !== taskElement);
     } else {
       taskItem = {
-        id: taskElement.getAttribute('data-id') || '',
+        id: parseInt(taskElement.getAttribute('data-id') || '-1'),
         element: taskElement,
         position: position,
       };
@@ -556,7 +597,8 @@ export class AppPresenter implements IControllerPresenter {
     // Determine which task element this belongs to.
     const taskElem = this.getTaskElementFromChild(element);
     if (!taskElem) return null;
-    const id = taskElem.getAttribute('data-id');
+    const idString = taskElem.getAttribute('data-id');
+    const id = idString ? parseInt(idString) : null;
     if (!id || !this.taskMap.has(id)) return null;
     const task = this.taskMap.get(id)!.task;
 
@@ -579,7 +621,8 @@ export class AppPresenter implements IControllerPresenter {
     const taskElem = this.getTaskElementFromChild(element);
     if (!taskElem) return null;
 
-    const id = taskElem.getAttribute('data-id');
+    const idString = taskElem.getAttribute('data-id');
+    const id = idString ? parseInt(idString) : null;
     return id ? this.taskMap.get(id)!.task : null;
   }
 
@@ -627,7 +670,7 @@ export class AppPresenter implements IControllerPresenter {
     return element.closest('.task') as HTMLElement;
   }
 
-  private dependencyKey(id1: string, id2: string): string {
+  private dependencyKey(id1: number, id2: number): string {
     return id1 + '->' + id2;
   }
 

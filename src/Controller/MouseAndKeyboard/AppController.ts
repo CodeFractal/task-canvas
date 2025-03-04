@@ -118,6 +118,9 @@ export class AppController {
     const e = this.controlState.lastEvent;
     if (!e) return;
 
+    // If the canvas is paused, the presenter has control.
+    if (this.app.isCanvasPaused()) return;
+
     // Special State: Context Menu is Open
     if (this.controlState.contextMenuContext) {
       if (e.type === 'click' || e.type === 'dblclick' || e.type === 'mouseup') {

@@ -5,7 +5,7 @@ import { IDependency } from "./IDependency";
 export interface ITask {
 
     /** Gets the Id of the task */
-    getId(): string;
+    getId(): number;
 
     /** Gets the title of the task */
     getTitle(): string;
@@ -19,12 +19,12 @@ export interface ITask {
     /** Gets the tasks that this task requires
      * @returns A map of required tasks, with the task Id as the key and the dependency as the value
     */
-    getRequired(): ReadonlyMap<string, IDependency>;
+    getRequired(): ReadonlyMap<number, IDependency>;
 
     /** Gets the tasks that require this task
      * @returns A map of requiring tasks, with the task Id as the key and the dependency as the value
     */
-    getRequiredBy(): ReadonlyMap<string, IDependency>;
+    getRequiredBy(): ReadonlyMap<number, IDependency>;
 
     /** Gets the position of the task on the canvas */
     getPosition(): CanvasCoords | null;

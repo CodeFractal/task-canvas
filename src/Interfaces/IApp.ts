@@ -1,9 +1,21 @@
 import { CanvasCoords } from "../Presenter/CoordinateSystem";
 import { IDependency } from "./IDependency";
+import { IStorageProvider } from "../Storage/IStorageProvider";
 import { ITask } from "./ITask";
 
 /** An interface which allows the controller to drive the application */
 export interface IApp {
+
+    /** Requests a connection to a storage provider
+     * @returns The storage provider, if one was selected, or null if the user cancelled the request
+     */
+    requestConnectionToStorage(): Promise<IStorageProvider | null>;
+
+    /** Loads data from the storage provider */
+    load(): Promise<void>;
+
+    /** Returns whether the canvas is paused */
+    isCanvasPaused(): boolean;
 
     /** Creates a new task
      * @param position The desired position of the task on the canvas
@@ -66,5 +78,11 @@ export interface IApp {
      * @returns Whether an action was redone
     */
     redo(): boolean;
+
+    /** Pauses the canvas, preventing further user interaction */
+    pauseCanvas(): void;
+
+    /** Unpauses the canvas, reallowing user interaction after the canvas has been paused */
+    unpauseCanvas(): void;
 
 };

@@ -6,11 +6,31 @@ import { ITask } from "./ITask";
 export interface IPresenter {
 
     /**
+     * Dims the canvas and pauses any canvas animations.
+     * This is used for modal dialogs.
+     */
+    pauseCanvas(): void;
+
+    /**
+     * Restores the canvas to its normal state after pausing.
+     */
+    unpauseCanvas(): void;
+
+    /**
+     * Shows a modal dialog.
+     * @param title The title of the dialog.
+     * @param message The message to display.
+     * @param options An array of tuples where each tuple contains a button key and its human-readable label.
+     * @returns A promise that resolves with the key of the selected button.
+     */
+    showModal(title: string, message: string, options: [string, string][]): Promise<string>;
+
+    /**
      * Pans the canvas by the specified amount.
      * @param delta The amount to pan the canvas by.
      */
     panCanvas(delta: SizeOnScreen): void;
-    
+
     /**
      * Gets the current position of a task element in canvas space.
      * @param task The task to get the position of.

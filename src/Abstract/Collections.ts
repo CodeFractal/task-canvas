@@ -1,5 +1,15 @@
 export class TwoKeyMap<TKey1, TKey2, TValue> {
     private readonly map = new Map<TKey1, Map<TKey2, TValue>>();
+    constructor(
+        entries?: Iterable<readonly [TKey1, TKey2, TValue]>
+    ) {
+        if (entries) {
+            for (const [key1, key2, value] of entries) {
+                this.set(key1, key2, value);
+            }
+        }
+    }
+
     public set(key1: TKey1, key2: TKey2, value: TValue): void {
         let innerMap = this.map.get(key1);
         if (!innerMap) {
