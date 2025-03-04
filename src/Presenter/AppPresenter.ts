@@ -381,7 +381,7 @@ export class AppPresenter implements IControllerPresenter {
     if (!mapping) return;
     const taskElem = mapping.element;
     // Try to find either a normal description or an editor container if we're already editing.
-    let descEl = taskElem.querySelector('[data-role="description"], .editor-container') as HTMLElement;
+    let descEl = taskElem.querySelector('[data-role="description"]') as HTMLElement;
     if (enable) {
       // If already in edit mode, do nothing.
       if (descEl && descEl.classList.contains('editor-container')) {
@@ -392,6 +392,7 @@ export class AppPresenter implements IControllerPresenter {
       // Create the container for our Quill editor.
       const editorContainer = document.createElement('div');
       editorContainer.classList.add('editor-container');
+      editorContainer.setAttribute('data-role', 'description');
       editorContainer.style.minHeight = '50px';
       // Create an inner element where Quill will attach.
       const editorElement = document.createElement('div');
@@ -452,7 +453,7 @@ export class AppPresenter implements IControllerPresenter {
     const mapping = this.taskMap.get(task.getId());
     if (!mapping) return null;
     const taskElem = mapping.element;
-    const descEl = taskElem.querySelector('[data-role="description"], .editor-container') as HTMLElement;
+    const descEl = taskElem.querySelector('[data-role="description"]') as HTMLElement;
     if (!descEl) return null;
     if (descEl.classList.contains('editor-container')) {
       const quill = (descEl as any)._quill;
@@ -467,7 +468,7 @@ export class AppPresenter implements IControllerPresenter {
     if (!mapping) return;
     const taskElem = mapping.element;
     // Look for either a plain description or an editor container if in edit mode.
-    const descEl = taskElem.querySelector('[data-role="description"], .editor-container') as HTMLElement;
+    const descEl = taskElem.querySelector('[data-role="description"]') as HTMLElement;
     if (!descEl) return;
     if (descEl.classList.contains('editor-container')) {
       // If editing, update the Quill editor's content.

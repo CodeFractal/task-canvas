@@ -387,6 +387,11 @@ export class AppController {
         return;
       }
 
+      // Prevent processing keyboard events while editing the task title.
+      else if (e.type === 'keydown' || e.type === 'keyup') {
+        return;
+      }
+
       // We don't return here, because some paths should continue to process the event.
     }
 
@@ -424,6 +429,13 @@ export class AppController {
         this.controlState.taskDescriptionEditContext = null;
         return;
       }
+
+      // Prevent processing keyboard events while editing the task description.
+      else if (e.type === 'keydown' || e.type === 'keyup') {
+        return;
+      }
+
+      // We don't return here, because some paths should continue to process the event.
     }
 
     // Normal State: No Special State (from here on)
