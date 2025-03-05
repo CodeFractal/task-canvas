@@ -223,12 +223,17 @@ export class AppPresenter implements IControllerPresenter {
     const header = document.createElement('div');
     header.classList.add('task-header');
 
-    // Create toggle element to collapse/expand the task.
-    const toggle = document.createElement('div');
-    toggle.classList.add('toggle');
-    toggle.setAttribute('data-role', 'toggle');
-    toggle.textContent = task.isExpanded() ? '▼' : '►';
-    header.appendChild(toggle);
+    // Create "expand" element to collapse/expand the task.
+    const expandSwitch = document.createElement('div');
+    expandSwitch.setAttribute('data-role', 'expand-switch');
+    expandSwitch.classList.add('expand-switch');
+    if (task.isExpanded()) {
+      expandSwitch.classList.add('expand-switch-expanded');
+    }
+    else if (task.getDescription().length === 0) {
+      expandSwitch.classList.add('expand-switch-add');
+    }
+    header.appendChild(expandSwitch);
 
     // Create title element.
     const title = document.createElement('div');
@@ -430,7 +435,9 @@ export class AppPresenter implements IControllerPresenter {
       adjustHeight();
       // Save the Quill instance on the container for later retrieval.
       (editorContainer as any)._quill = quill;
-    } else {
+    }
+    // If we're disabling edit mode, we need to clean up the Quill editor.
+    else {
       // If we're not in edit mode (i.e. not using the editor container), nothing to do.
       if (!descEl || !descEl.classList.contains('editor-container')) {
         return;
@@ -439,7 +446,10 @@ export class AppPresenter implements IControllerPresenter {
       const quill = (descEl as any)._quill;
       if (!quill) return;
       // Grab the updated HTML.
-      const newValue = quill.root.innerHTML;
+      let newValue = quill.root.innerHTML;
+      if (newValue === '<p><br></p>') {
+        newValue = '';
+      }
       // Create a new description element.
       const newDescEl = document.createElement('div');
       newDescEl.classList.add('description');
@@ -458,8 +468,14 @@ export class AppPresenter implements IControllerPresenter {
     if (!descEl) return null;
     if (descEl.classList.contains('editor-container')) {
       const quill = (descEl as any)._quill;
-      return quill ? quill.root.innerHTML : null;
-    } else {
+      if (!quill) return null;
+      let value = quill.root.innerHTML;
+      if (value === '<p><br></p>') {
+        value = '';
+      }
+      return value;
+    }
+    else {
       return descEl.innerHTML;
     }
   }
@@ -471,15 +487,22 @@ export class AppPresenter implements IControllerPresenter {
     // Look for either a plain description or an editor container if in edit mode.
     const descEl = taskElem.querySelector('[data-role="description"]') as HTMLElement;
     if (!descEl) return;
+    // If editing, update the Quill editor's content.
     if (descEl.classList.contains('editor-container')) {
-      // If editing, update the Quill editor's content.
       const quill = (descEl as any)._quill;
       if (quill) {
-        quill.root.innerHTML = description;
+        quill.root.innerHTML = description || '<p><br></p>';
       }
-    } else {
-      // If not editing, simply update the innerHTML.
+    }
+    // If not editing
+    else {
       descEl.innerHTML = description;
+      if (description.length === 0) {
+        const expandSwitch = taskElem.querySelector('[data-role="expand-switch"]') as HTMLElement;
+        if (expandSwitch) {
+          expandSwitch.classList.add('expand-switch-add');
+        }
+      }
     }
   }
 
@@ -504,9 +527,21 @@ export class AppPresenter implements IControllerPresenter {
     if (taskBody) {
       taskBody.style.display = collapsed ? 'none' : 'block';
     }
-    const toggleElem = taskElem.querySelector('.toggle') as HTMLElement;
-    if (toggleElem) {
-      toggleElem.textContent = collapsed ? '►' : '▼';
+    const expandSwitch = taskElem.querySelector('[data-role="expand-switch"]') as HTMLElement;
+    if (expandSwitch) {
+      if (collapsed) {
+        expandSwitch.classList.remove('expand-switch-expanded');
+        if (task.getDescription().length === 0) {
+          expandSwitch.classList.add('expand-switch-add');
+        }
+        else {
+          expandSwitch.classList.remove('expand-switch-add');
+        }
+      }
+      else {
+        expandSwitch.classList.add('expand-switch-expanded');
+        expandSwitch.classList.remove('expand-switch-add');
+      }
     }
   }
 
@@ -609,7 +644,7 @@ export class AppPresenter implements IControllerPresenter {
       return { task, component: TaskComponent.Title };
     } else if (element.closest('[data-role="description"]')) {
       return { task, component: TaskComponent.Description };
-    } else if (element.closest('[data-role="toggle"]')) {
+    } else if (element.closest('[data-role="expand-switch"]')) {
       return { task, component: TaskComponent.Collapse };
     } else if (element.closest('[data-role="checkbox"]')) {
       return { task, component: TaskComponent.Completion };

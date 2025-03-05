@@ -62,14 +62,16 @@ export class App implements IApp {
         this.pushUndo({ type: 'toggleComplete', taskId: task.id, newValue: task.completed, oldValue: !task.completed });
         this.saveToStorage(task);
     }
-    toggleTaskExpansion(itask: ITask, expand: boolean | null): void {
+    toggleTaskExpansion(itask: ITask, expand: boolean | null, skipUndo: boolean = false): void {
         const task = itask instanceof Task ? itask : allTasks.get(itask.getId());
         if (!task) throw new Error('Task does not exist');
 
         task.collapsed = expand === null ? !task.collapsed : !expand;
         this.presenter.toggleTaskExpansion(task, task.collapsed);
 
-        this.pushUndo({ type: 'toggleCollapse', taskId: task.id, newValue: task.collapsed, oldValue: !task.collapsed });
+        if (!skipUndo) {
+            this.pushUndo({ type: 'toggleCollapse', taskId: task.id, newValue: task.collapsed, oldValue: !task.collapsed });
+        }
         this.saveToStorage(task);
     }
     changeTaskTitle(itask: ITask, title: string): void {
@@ -90,6 +92,10 @@ export class App implements IApp {
         const oldDescription = task.description;
         task.description = description;
         this.presenter.setTaskDescription(task, description);
+
+        if (!description) {
+            this.toggleTaskExpansion(task, false);
+        }
 
         this.pushUndo({ type: 'editTask', taskId: task.id, field: 'description', newDescription: description, oldDescription: oldDescription });
         this.saveToStorage(task);

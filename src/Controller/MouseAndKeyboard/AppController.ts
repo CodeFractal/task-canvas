@@ -403,7 +403,7 @@ export class AppController {
       const finishEditingTaskDescription = (): void => {
         const description = this.presenter.getTaskDescription(context.task);
         this.presenter.toggleEditModeForTaskDescription(context.task, false);
-        if (description && description.length > 0) {
+        if (description != null) {
           this.app.changeTaskDescription(context.task, description);
         }
         else {
@@ -427,6 +427,7 @@ export class AppController {
         this.presenter.toggleEditModeForTaskDescription(context.task, false);
         this.presenter.setTaskDescription(context.task, context.originalDescription);
         this.controlState.taskDescriptionEditContext = null;
+        
         return;
       }
 
@@ -489,35 +490,38 @@ export class AppController {
     // Left-Click or Double-Click
     if ((e.type === 'click' || e.type === 'dblclick') && (e as MouseEvent).button === 0) {
       const taskInfo = this.presenter.getTaskInfo(this.controlState.target as Element);
-      const eTask = taskInfo ? taskInfo.task : null;
+      const task = taskInfo ? taskInfo.task : null;
 
       // Toggle Task Selection (Shift-Click)
-      if (eTask && this.controlState.keys['Shift']) {
-        if (this.controlState.selectedTasks.has(eTask)) {
-          this.deselectTask(eTask);
+      if (task && this.controlState.keys['Shift']) {
+        if (this.controlState.selectedTasks.has(task)) {
+          this.deselectTask(task);
         }
         else {
-          this.selectTask(eTask);
+          this.selectTask(task);
         }
         return;
       }
 
       this.deselectAllTasks();
 
-      if (eTask) {
+      if (task) {
 
         // Toggle Expand/Collapse Task (Double-Click on Task Header)
         if (e.type === 'dblclick' && taskInfo!.component === TaskComponent.Header) {
-          this.app.toggleTaskExpansion(eTask, null);
-          return;
+          // Only expand if there is a description.
+          if (task.isExpanded() || task.getDescription()) {
+            this.app.toggleTaskExpansion(task, null);
+            return;
+          }
         }
 
         // Edit Task Title
         if (taskInfo!.component === TaskComponent.Title) {
           const originalTitle = taskInfo!.task.getTitle();
-          this.presenter.toggleEditModeForTaskTitle(eTask, true);
+          this.presenter.toggleEditModeForTaskTitle(task, true);
           this.controlState.taskTitleEditContext = {
-            task: eTask,
+            task: task,
             originalTitle
           };
           return;
@@ -526,9 +530,9 @@ export class AppController {
         // Edit Task Description
         if (taskInfo!.component === TaskComponent.Description) {
           const originalDescription = taskInfo!.task.getDescription();
-          this.presenter.toggleEditModeForTaskDescription(eTask, true);
+          this.presenter.toggleEditModeForTaskDescription(task, true);
           this.controlState.taskDescriptionEditContext = {
-            task: eTask,
+            task: task,
             originalDescription
           };
           return;
@@ -536,19 +540,29 @@ export class AppController {
 
         // Toggle Expand/Collapse Task (Button Click)
         if (taskInfo!.component === TaskComponent.Collapse) {
-          this.app.toggleTaskExpansion(eTask, null);
+          const isExpanding = !task.isExpanded();
+          this.app.toggleTaskExpansion(task, null);
+
+          // If expanding and no description, start editing the description automatically.
+          if (isExpanding && !task.getDescription()) {
+            this.presenter.toggleEditModeForTaskDescription(task, true);
+            this.controlState.taskDescriptionEditContext = {
+              task: task,
+              originalDescription: ''
+            };
+          }
           return;
         }
 
         // Toggle Complete/Incomplete Task
         if (taskInfo!.component === TaskComponent.Completion) {
-          this.app.toggleTaskCompletion(eTask, null);
+          this.app.toggleTaskCompletion(task, null);
           return;
         }
 
         // Select Task (Single-Click)
         if (e.type === 'click') {
-          this.selectTask(eTask);
+          this.selectTask(task);
           return;
         }
 

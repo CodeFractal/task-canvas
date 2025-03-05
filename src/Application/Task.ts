@@ -25,10 +25,10 @@ export class Task implements ITask {
         }
         this.id = options.id || Task.taskIdCounter++;
         this.title = options.title || 'New Task';
-        this.description = options.description || '<p>Description</p>';
+        this.description = options.description || '';
         this.position = options.position || null;
         this.completed = options.completed || false;
-        this.collapsed = options.collapsed || false;
+        this.collapsed = options.collapsed || true;
     }
 
     getId(): number { return this.id; }
