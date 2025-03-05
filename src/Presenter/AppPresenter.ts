@@ -264,6 +264,7 @@ export class AppPresenter implements IControllerPresenter {
     // Create task body container.
     const taskBody = document.createElement('div');
     taskBody.classList.add('task-body');
+    taskBody.style.display = task.isExpanded() ? 'block' : 'none';
     eTask.appendChild(taskBody);
 
     // Create description element.
