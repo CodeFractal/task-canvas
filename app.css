@@ -48,12 +48,36 @@ body {
     height: 40px;
     padding: 0 0 0 10px;
 }
-    .task-header > .toggle {
+    .task-header > .expand-switch {
         width: 16px;
         height: 16px;
         cursor: pointer;
         margin-right: 10px;
     }
+        .task-header > .expand-switch:hover {
+            color: #fff;
+        }
+        .task-header > .expand-switch:not(.expand-switch-expanded) {
+            padding-bottom: .1em;
+        }
+        .task-header > .expand-switch::before {
+            content: "▶";
+        }
+        .task-header > .expand-switch.expand-switch-expanded::before {
+            content: "▼";
+        }
+        .task-header > .expand-switch.expand-switch-add {
+            font-size: 20px;
+            padding-left: .1em;
+            padding-bottom: .3em;
+            color: #FFFFFF22;
+        }
+        .task-header > .expand-switch.expand-switch-add::before {
+            content: "+";
+        }
+            .task-header > .expand-switch.expand-switch-add:hover {
+                color: #fff;
+            }
     .task-header > .title {
         flex-grow: 1;
         text-align: center;
