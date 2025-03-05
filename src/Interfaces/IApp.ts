@@ -2,6 +2,7 @@ import { CanvasCoords } from "../Presenter/CoordinateSystem";
 import { IDependency } from "./IDependency";
 import { IStorageProvider } from "../Storage/IStorageProvider";
 import { ITask } from "./ITask";
+import { IStorageLocation } from "../Storage/IStorageLocation";
 
 /** An interface which allows the controller to drive the application */
 export interface IApp {
@@ -10,6 +11,12 @@ export interface IApp {
      * @returns The storage provider, if one was selected, or null if the user cancelled the request
      */
     requestConnectionToStorage(): Promise<IStorageProvider | null>;
+
+    /** Requests a connection to a specific location
+     * @param locationId The ID of the location to connect to
+     * @returns The storage provider, if one was selected, or null if the user cancelled the request
+     */
+    requestConnectionToStorageLocation(location: IStorageLocation): Promise<IStorageProvider | null>;
 
     /** Loads data from the storage provider */
     load(): Promise<void>;

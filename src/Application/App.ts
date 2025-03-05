@@ -14,6 +14,8 @@ import { Task } from './Task';
 import { Dependency } from './Dependency';
 import { IStorageProvider } from '../Storage/IStorageProvider';
 import { IStorageConnectionProvider } from '../Storage/IStorageConnectionProvider';
+import { IStorageLocation } from '../Storage/IStorageLocation';
+import { QueryStringHandler } from './QueryStringHandler';
 
 /** Object mapping task IDs to Tasks */
 const allTasks: Map<number, Task> = new Map();
@@ -37,7 +39,8 @@ export class App implements IApp {
 
     constructor(
         private readonly presenter: IPresenter,
-        private readonly storageConnectionProviders: IStorageConnectionProvider[]
+        private readonly storageConnectionProviders: IStorageConnectionProvider[],
+        private readonly queryStringHandler: QueryStringHandler
     ) { }
 
     isCanvasPaused(): boolean {
@@ -267,13 +270,51 @@ export class App implements IApp {
             // Unpause canvas if paused
             if (doPause) this.unpauseCanvas();
 
+            // Update query string
+            if (this.storageProvider && this.storageProvider.locationId) {
+                this.queryStringHandler.setStorageLocation({
+                    source: storageConnectionProvider.uniqueName,
+                    id: this.storageProvider.locationId
+                });
+            }
+
             return this.storageProvider;
         }
         if (this.storageConnectionProviders.length === 0) {
             throw new Error('No storage connection providers available');
         }
         throw new Error('Multiple storage connection providers - not yet implemented');
-    }    
+    }
+    async requestConnectionToStorageLocation(location: IStorageLocation, doPause: boolean = true): Promise<IStorageProvider | null> {
+        // Determine the storage connection provider
+        const storageConnectionProvider = this.storageConnectionProviders.find((provider): boolean => provider.uniqueName === location.source);
+        if (!storageConnectionProvider) {
+            console.warn('Storage connection provider not found');
+            return null;
+        }
+
+        // Pause canvas if requested
+        if (doPause) this.pauseCanvas();
+
+        // Authenticate
+        const authenticated = await storageConnectionProvider.requestAuthentication();
+        if (authenticated) {
+            this.storageProvider = await storageConnectionProvider.requestConnectionToLocation(location.id);
+        }
+
+        // Unpause canvas if paused
+        if (doPause) this.unpauseCanvas();
+
+        // Update query string
+        if (this.storageProvider && this.storageProvider.locationId) {
+            this.queryStringHandler.setStorageLocation({
+                source: storageConnectionProvider.uniqueName,
+                id: this.storageProvider.locationId
+            });
+        }
+
+        return this.storageProvider;
+    }
     async load(doPause: boolean = true): Promise<void> {
         if (!this.storageProvider) throw new Error('No storage provider connected');
 

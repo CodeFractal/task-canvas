@@ -15,6 +15,8 @@ export class GoogleDriveStorageProvider implements IStorageProvider {
         this.canvasData = new CanvasData();
     }
 
+    get locationId(): string { return this.fileId; }
+
     async retrieveCanvasData(): Promise<ICanvasDataModel> {
         const content = await this._service.open(this.fileId);
         const data = content ? JSON.parse(content) as ICanvasDataModel : undefined;

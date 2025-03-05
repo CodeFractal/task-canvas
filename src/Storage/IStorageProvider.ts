@@ -2,6 +2,9 @@ import { ICanvasDataModel, IDependencyDataModel, ITaskDataModel } from "./DataMo
 
 export interface IStorageProvider {
 
+    /** The unique ID of the location this provider is connected to */
+    readonly locationId: string | null;
+
     /** Loads the canvas data from storage
      * @returns The canvas data model
     */

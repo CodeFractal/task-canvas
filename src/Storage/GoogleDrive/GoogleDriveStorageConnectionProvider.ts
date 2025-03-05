@@ -16,6 +16,8 @@ export class GoogleDriveStorageConnectionProvider implements IStorageConnectionP
         this._service = GoogleDriveStorageConnectionProvider._service;
     }
 
+    get uniqueName(): string { return 'g'; } // Unique name for Google Drive
+
     async requestAuthentication(): Promise<boolean> {
         if (!this.signedIn) {
             this.signedIn = this._service.tryAutoSignIn();
@@ -26,10 +28,6 @@ export class GoogleDriveStorageConnectionProvider implements IStorageConnectionP
     }
 
     async requestConnection(isNew: boolean): Promise<IStorageProvider | null> {
-        if (!this.signedIn) {
-            console.error("Not signed in to Google Drive.");
-            return null;
-        }
         if (isNew) {
             // Let the user decide if they want to choose a folder.
             const useFolder = confirm(
@@ -65,6 +63,10 @@ export class GoogleDriveStorageConnectionProvider implements IStorageConnectionP
             if (!fileId) return null;
             return new GoogleDriveStorageProvider(this._service, fileId, MIME_TYPE);
         }
+    }
+
+    async requestConnectionToLocation(locationId: string): Promise<IStorageProvider | null> {
+        return new GoogleDriveStorageProvider(this._service, locationId, MIME_TYPE);
     }
 
     /**
