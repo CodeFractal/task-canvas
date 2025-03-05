@@ -95,7 +95,7 @@ export class GoogleDriveStorageProvider implements IStorageProvider {
 
 class CanvasData {
     public version: string;
-    private taskMap: Map<string, TaskDataModel>;
+    private taskMap: Map<number, TaskDataModel>;
     private depMap: Map<string, DependencyDataModel>;
     public pan: { x: number; y: number; };
     public zoom: number;
@@ -138,7 +138,7 @@ class CanvasData {
 }
 
 class TaskDataModel implements ITaskDataModel {
-    public id: string;
+    public id: number;
     public title: string;
     public description: string;
     public completed: boolean;
@@ -159,8 +159,8 @@ class TaskDataModel implements ITaskDataModel {
 }
 
 class DependencyDataModel implements IDependencyDataModel {
-    public requiredTaskId: string;
-    public requiredByTaskId: string;
+    public requiredTaskId: number;
+    public requiredByTaskId: number;
 
     constructor(model: IDependencyDataModel) {
         this.requiredTaskId = model.requiredTaskId;
