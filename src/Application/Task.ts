@@ -24,11 +24,11 @@ export class Task implements ITask {
             Task.taskIdCounter = Math.max(Task.taskIdCounter, options.id + 1);
         }
         this.id = options.id || Task.taskIdCounter++;
-        this.title = options.title || 'New Task';
-        this.description = options.description || '';
-        this.position = options.position || null;
-        this.completed = options.completed || false;
-        this.collapsed = options.collapsed || true;
+        this.title = options.title ?? 'New Task';
+        this.description = options.description ?? '';
+        this.position = options.position ?? null;
+        this.completed = options.completed ?? false;
+        this.collapsed = options.collapsed ?? true
     }
 
     getId(): number { return this.id; }
