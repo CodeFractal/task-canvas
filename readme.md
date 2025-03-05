@@ -72,10 +72,10 @@ Delete multiple tasks by:
 ### Add a Dependency
 Tasks can have any number of dependencies. Dependencies are represented by an arrow extending from (the right side of) the required task to (the left side of) the task that requires it.
 Add a dependency to a task by:
-- Right-clicking a task that depends on another, and selecting "Requires Dependency"
+- Right-clicking a task that depends on another, and selecting "Requires ..."
 - Clicking on the task that is required
 Add a task as a dependency of another task by:
-- Right-clicking the task that must be completed first, and selecting "Required by Dependency"
+- Right-clicking the task that must be completed first, and selecting "Required by ..."
 - Clicking on the task that the first task is required by
 
 ### Delete a Dependency

@@ -579,14 +579,14 @@ export class AppController {
       const eTask = taskInfo ? taskInfo.task : null;
       if (eTask) {
         let options: [string, string][] = [
-          ['REQUIRES_DEPENDENCY', "Requires Dependency"],
-          ['REQUIRED_BY_DEPENDENCY', "Required By Dependency"]
+          ['REQUIRES_DEPENDENCY', "Requires ..."],
+          ['REQUIRED_BY_DEPENDENCY', "Required by ..."]
         ];
         if (this.controlState.selectedTasks.has(eTask)) {
-          options.unshift(['DELETE_SELECTED_TASKS', "Delete Selected Tasks"]);
+          options.push(['DELETE_SELECTED_TASKS', "Delete Selected Tasks"]);
         }
         else {
-          options.unshift(['DELETE_TASK', "Delete Task"]);
+          options.push(['DELETE_TASK', "Delete Task"]);
         }
         this.presenter.showContextMenu(this.controlState.mousePosition, options);
         this.controlState.contextMenuContext = {
