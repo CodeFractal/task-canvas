@@ -186,14 +186,17 @@ export class AppController {
     }
 
     // Special State: Holding Canvas (Panning)
-    if (this.controlState.mouseIsHoldingCanvas) {
+    if (this.controlState.canvasPanningContext) {
       if (e.type === 'mousemove') {
-        const movement = this.controlState.mouseMovement;
-        this.presenter.panCanvas(movement);
+        const context = this.controlState.canvasPanningContext;
+        const dragVector = this.controlState.mousePosition.subtractCoords(context.originalMousePosition);
+        const newCanvasPan = context.originalCanvasPan.add(dragVector);
+        this.presenter.setCanvasPan(newCanvasPan);
+        return;
       }
-      else if (e.type === 'mouseup' && (e as MouseEvent).button === 2) {
-        this.controlState.mouseIsHoldingCanvas = false;
-      }
+      else if (e.type === 'mouseup' && !this.controlState.rightPressed && !this.controlState.middlePressed) {
+          this.controlState.canvasPanningContext = null;
+      } 
       return;
     }
 
@@ -427,7 +430,7 @@ export class AppController {
         this.presenter.toggleEditModeForTaskDescription(context.task, false);
         this.presenter.setTaskDescription(context.task, context.originalDescription);
         this.controlState.taskDescriptionEditContext = null;
-        
+
         return;
       }
 
@@ -442,7 +445,8 @@ export class AppController {
     // Normal State: No Special State (from here on)
 
     if (e.type === 'mousedown') {
-      if ((e as MouseEvent).button === 0) {
+      const mouseDownButton = (e as MouseEvent).button;
+      if (mouseDownButton === 0) {
         const taskInfo = this.presenter.getTaskInfo(this.controlState.target as Element);
         const eTask = taskInfo ? taskInfo.task : null;
 
@@ -479,7 +483,7 @@ export class AppController {
       }
 
       // Grab the Canvas
-      else if ((e as MouseEvent).button === 2) {
+      else if (mouseDownButton === 1 || mouseDownButton === 2) {
         this.tryGrabCanvas();
         return;
       }
@@ -724,7 +728,7 @@ export class AppController {
     return (
       this.controlState.mouseIsHoldingSingleTask ||
       this.controlState.mouseIsHoldingTaskGroup ||
-      this.controlState.mouseIsHoldingCanvas ||
+      this.controlState.canvasPanningContext != null ||
       this.controlState.mouseIsHoldingDependencyArrow ||
       this.controlState.mouseIsDrawingSelectionBox
     );
@@ -742,8 +746,8 @@ export class AppController {
     if (this.controlState.mouseIsHoldingTaskGroup) {
       this.controlState.mouseIsHoldingTaskGroup = false;
     }
-    if (this.controlState.mouseIsHoldingCanvas) {
-      this.controlState.mouseIsHoldingCanvas = false;
+    if (this.controlState.canvasPanningContext) {
+      this.controlState.canvasPanningContext = null;
     }
     if (this.controlState.mouseIsDrawingSelectionBox) {
       this.releaseSelectionBox();
@@ -803,12 +807,17 @@ export class AppController {
    * @returns true if successful, false otherwise
    */
   private tryGrabCanvas(): boolean {
-    if (this.controlState.mouseIsHoldingCanvas)
+    if (this.controlState.canvasPanningContext)
       return true;
     if (this.mouseIsHoldingSomething())
       return false;
+    if (this.controlState.contextMenuContext)
+      return false;
 
-    this.controlState.mouseIsHoldingCanvas = true;
+    this.controlState.canvasPanningContext = {
+      originalMousePosition: this.controlState.mousePosition,
+      originalCanvasPan: this.presenter.getCanvasPan()
+    };
     return true;
   }
 

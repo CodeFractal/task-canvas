@@ -26,10 +26,15 @@ export interface IPresenter {
     showModal(title: string, message: string, options: [string, string][]): Promise<string>;
 
     /**
-     * Pans the canvas by the specified amount.
-     * @param delta The amount to pan the canvas by.
+     * Gets the current position of the canvas.
      */
-    panCanvas(delta: SizeOnScreen): void;
+    getCanvasPan(): ScreenCoords;
+
+    /**
+     * Sets the position of the canvas.
+     * @param position The new x and y coordinates.
+     */
+    setCanvasPan(position: ScreenCoords): void;
 
     /**
      * Gets the current position of a task element in canvas space.

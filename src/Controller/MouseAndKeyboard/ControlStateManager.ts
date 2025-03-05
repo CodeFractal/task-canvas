@@ -33,7 +33,6 @@ export class ControlStateManager {
   public mouseIsHoldingDependencyArrow: boolean = false;
   public mouseIsHoldingSingleTask: boolean = false;
   public mouseIsHoldingTaskGroup: boolean = false;
-  public mouseIsHoldingCanvas: boolean = false;
   public mouseIsDrawingSelectionBox: boolean = false;
   public taskGroupAnchor?: ITask;
   public taskGroupOriginalPositions?: Map<ITask, CanvasCoords>;
@@ -80,8 +79,8 @@ export interface TaskDescriptionEditContext {
 
 /** Holds context for a canvas panning operation. */
 export interface CanvasPanningContext {
-  /** The original position of the canvas */
-  originalPosition: CanvasCoords;
   /** The original position of the mouse */
   originalMousePosition: ScreenCoords;
+  /** The original position of the canvas */
+  originalCanvasPan: ScreenCoords;
 }

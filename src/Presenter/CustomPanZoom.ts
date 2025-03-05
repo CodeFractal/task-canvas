@@ -3,6 +3,7 @@ import { Rectangle, Vector2D } from "../Abstract/Math";
 export class CustomPanZoom {
     private static readonly minScale = 0.25;
     private static readonly maxScale = 2;
+    private static readonly scrollIncrement = 20;
 
     private static canvas: HTMLElement | null = null;
     private static scale = 1;
@@ -27,16 +28,46 @@ export class CustomPanZoom {
 
         // Zoom in/out with ctrl + scrollwheel
         if (e.ctrlKey) {
-            const delta = e.deltaY < 0 ? 0.1 : -0.1;
+            const delta = e.deltaY * -0.001;
             const mousePos = new Vector2D(e.clientX, e.clientY);
-            this.setScale(this.scale + delta, mousePos);
+            this.setScale(this.scale * (1 + delta), mousePos);
         }
-
-        // Pan with scrollwheel
         else {
-            const delta = new Vector2D(e.deltaX, e.deltaY);
-            this.translation = this.translation.sub(delta);
-            this.updateTransform();
+            let panX = 0;
+            let panY = 0;
+            const scrollIncrement = this.scrollIncrement * this.scale;
+            if (e.shiftKey) {
+                if (e.deltaY > 0) {
+                    panX = -scrollIncrement;
+                }
+                else if (e.deltaY < 0) {
+                    panX = scrollIncrement;
+                }
+            }
+            else {
+                if (e.deltaY > 0) {
+                    panY = -scrollIncrement;
+                }
+                else if (e.deltaY < 0) {
+                    panY = scrollIncrement;
+                }
+                if (e.deltaX > 0) {
+                    panX = -scrollIncrement;
+                }
+                else if (e.deltaX < 0) {
+                    panX = scrollIncrement;
+                }
+            }
+
+            const newTranslation = this.translation.add(new Vector2D(panX, panY));
+
+            // Snap the translation to the nearest scroll increment on each (adjusted) axis
+            const snapX = panX ? Math.round(newTranslation.x / scrollIncrement) * scrollIncrement : newTranslation.x;
+            const snapY = panY ? Math.round(newTranslation.y / scrollIncrement) * scrollIncrement : newTranslation.y;
+
+            const snappedTranslation = new Vector2D(snapX, snapY);
+            this.setTranslation(snappedTranslation);
+
         }
     }
 
@@ -63,6 +94,11 @@ export class CustomPanZoom {
 
     public static getTranslation(): Vector2D {
         return this.translation;
+    }
+
+    public static setTranslation(translation: Vector2D): void {
+        this.translation = translation;
+        this.updateTransform();
     }
 
 }

@@ -25,6 +25,17 @@ Expand or collapse the task by:
 - Clicking on the arrow in the top-left corner of the task;
 - OR: Clicking in an empty area in the task's header
 
+### Navigate
+Pan the canvas by:
+- Right-clicking and dragging the canvas;
+- OR: Middle-clicking and dragging the canvas;
+Scroll the canvas up/down snapping to grid lines by:
+- Scrolling the mouse wheel up or down
+Scroll the canvas left/right snapping to grid lines by:
+- Holding Shift and scrolling the mouse wheel up or down
+Zoom in and out by:
+- Holding Ctrl and scrolling up (to zoom in) or down (to zoom out)
+
 ### Move Tasks
 Move a task by:
 - Clicking and dragging the task header around the canvas

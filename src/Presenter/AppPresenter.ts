@@ -88,8 +88,13 @@ export class AppPresenter implements IControllerPresenter {
     });
   }
 
-  panCanvas(delta: SizeOnScreen): void {
-    CustomPanZoom.panBy(delta.vec);
+  getCanvasPan(): ScreenCoords {
+    const translation = CustomPanZoom.getTranslation();
+    return ScreenCoords.new(translation.x, translation.y);
+  }
+
+  setCanvasPan(position: ScreenCoords): void {
+    CustomPanZoom.setTranslation(position.vec);
   }
 
   getTaskPositionOnCanvas(task: ITask): CanvasCoords {

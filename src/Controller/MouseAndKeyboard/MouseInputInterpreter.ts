@@ -14,17 +14,29 @@ export const MouseInputInterpreter = (function () {
     /** Stores the last mousedown event from the right button. */
     let rightMouseDownEvent: MouseEvent | null = null;
 
+    /** Stores the last mousedown event from the middle button. */
+    let middleMouseDownEvent: MouseEvent | null = null;
+
     /**
      * Stores information needed to determine whether a single click could turn into a double-click.
      * Holds the event object and a timestamp.
      */
     let lastClickData: { event: MouseEvent; time: number } | null = null;
 
+    /**
+     * Stores information needed to determine whether a single middle click could turn into a double-click.
+     * Holds the event object and a timestamp.
+     */
+    let middleLastClickData: { event: MouseEvent; time: number } | null = null;
+
     /** Tracks whether a left-button drag has started after crossing the drag threshold. */
     let leftDragStarted = false;
 
     /** Tracks whether a right-button drag has started after crossing the drag threshold. */
     let rightDragStarted = false;
+
+    /** Tracks whether a middle-button drag has started after crossing the drag threshold. */
+    let middleDragStarted = false;
 
     /** Movement threshold (pixels) to interpret a mousedown as a drag rather than a click. */
     const dragThreshold = 5;
@@ -37,7 +49,7 @@ export const MouseInputInterpreter = (function () {
 
     /**
      * Called when a mouse button is pressed down.
-     * We do not immediately emit a mousedown event for left or right buttons here.
+     * We do not immediately emit a mousedown event for left, middle, or right buttons here.
      * Instead, we wait until the mouse has moved beyond the drag threshold (in onMouseMove).
      *
      * @param {MouseEvent} e The raw MouseEvent object.
@@ -52,13 +64,17 @@ export const MouseInputInterpreter = (function () {
             // Right mouse button pressed: track the event but do not immediately emit.
             rightMouseDownEvent = e;
             rightDragStarted = false;
+        } else if (e.button === 1) {
+            // Middle mouse button pressed: track the event but do not immediately emit.
+            middleMouseDownEvent = e;
+            middleDragStarted = false;
         }
     }
 
     /**
      * Called whenever the mouse moves.
      * Always emits a 'mousemove' virtual event.
-     * Checks if a drag should be started for the left or right button if they've been pressed.
+     * Checks if a drag should be started for the left, middle, or right button if they've been pressed.
      *
      * @param {MouseEvent} e The raw MouseEvent object.
      * @returns {void}
@@ -90,6 +106,19 @@ export const MouseInputInterpreter = (function () {
             if (distance > dragThreshold) {
                 rightDragStarted = true;
                 safeCallback(createVirtualEvent('mousedown', rightMouseDownEvent));
+            }
+        }
+
+        // If middle mouse is down but we've not started a drag, check distance moved.
+        if (middleMouseDownEvent && !middleDragStarted) {
+            const dx = e.clientX - middleMouseDownEvent.clientX;
+            const dy = e.clientY - middleMouseDownEvent.clientY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            // If distance > threshold, emit a 'mousedown' to signify drag has started.
+            if (distance > dragThreshold) {
+                middleDragStarted = true;
+                safeCallback(createVirtualEvent('mousedown', middleMouseDownEvent));
             }
         }
     }
@@ -145,6 +174,31 @@ export const MouseInputInterpreter = (function () {
             }
             rightMouseDownEvent = null;
             rightDragStarted = false;
+        } else if (e.button === 1) {
+            // Middle button release
+            if (middleDragStarted) {
+                // If we already started dragging, just emit a 'mouseup'
+                safeCallback(createVirtualEvent('mouseup', e));
+            } else {
+                // Minimal movement -> could be click or part of a double-click
+                if (middleLastClickData && now - middleLastClickData.time < dblClickDelay) {
+                    // If we have a recent middle click in memory, emit 'dblclick'
+                    safeCallback(createVirtualEvent('dblclick', e));
+                    middleLastClickData = null;
+                } else {
+                    // Otherwise, store this click and wait to see if another comes soon
+                    middleLastClickData = { event: e, time: now };
+                    setTimeout(() => {
+                        // If double-click didn't occur within dblClickDelay, emit a single 'click'
+                        if (middleLastClickData && Date.now() - middleLastClickData.time >= dblClickDelay) {
+                            safeCallback(createVirtualEvent('click', e));
+                            middleLastClickData = null;
+                        }
+                    }, dblClickDelay);
+                }
+            }
+            middleMouseDownEvent = null;
+            middleDragStarted = false;
         } else {
             // For any other button, just emit a 'mouseup'
             safeCallback(createVirtualEvent('mouseup', e));
@@ -236,9 +290,12 @@ export const MouseInputInterpreter = (function () {
         callback = null;
         leftMouseDownEvent = null;
         rightMouseDownEvent = null;
+        middleMouseDownEvent = null;
         lastClickData = null;
+        middleLastClickData = null;
         leftDragStarted = false;
         rightDragStarted = false;
+        middleDragStarted = false;
     }
 
     // Expose public methods.
