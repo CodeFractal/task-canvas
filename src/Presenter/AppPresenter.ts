@@ -7,7 +7,7 @@ import { CanvasCoords, CanvasRect, ScreenCoords, ScreenRect, SizeOnScreen } from
 import { Rectangle, Vector2D } from '../Abstract/Math';
 import { ModalDialog } from './ModalDialog';
 
-declare var Quill: any;
+declare var SimpleMDE: any;
 
 /**
  * DOMController manages the canvas, task elements, dependency arrows, and related UI elements.
@@ -281,8 +281,42 @@ export class AppPresenter implements IControllerPresenter {
     const description = document.createElement('div');
     description.classList.add('description');
     description.setAttribute('data-role', 'description');
-    description.innerHTML = task.getDescription();
+    description.dataset.mode = 'display';
+    description.style.minHeight = '50px';
+    // Initialize SimpleMDE editor
+    const descriptionTextArea = document.createElement('textarea');
+    description.appendChild(descriptionTextArea);
+    const simplemde = new SimpleMDE({
+      element: descriptionTextArea,
+      initialValue: task.getDescription(),
+      toolbar: [
+        "bold",
+        "italic",
+        "strikethrough",
+        "heading",
+        "heading-smaller",
+        "heading-bigger",
+        "code",
+        "quote",
+        "unordered-list",
+        "ordered-list",
+        "clean-block",
+        "link",
+        "image",
+        "preview",
+        "guide"
+      ],
+      status: false,
+      spellChecker: false
+    });
+    simplemde.togglePreview();
+    const toolbar = description.querySelector('.editor-toolbar') as HTMLElement;
+    toolbar.style.display = 'none';
+    (description as any)._simplemde = simplemde;
+    // End SimpleMDE
     taskBody.appendChild(description);
+
+    
 
     // Add the new task to the canvas in the correct z-order.
     if (pos) {
@@ -391,123 +425,52 @@ export class AppPresenter implements IControllerPresenter {
     const mapping = this.taskMap.get(task.getId());
     if (!mapping) return;
     const taskElem = mapping.element;
-    // Try to find either a normal description or an editor container if we're already editing.
     let descEl = taskElem.querySelector('[data-role="description"]') as HTMLElement;
-    if (enable) {
-      // If already in edit mode, do nothing.
-      if (descEl && descEl.classList.contains('editor-container')) {
-        return;
-      }
-      // Save current HTML content.
-      const oldValue = descEl ? descEl.innerHTML : '';
-      // Create the container for our Quill editor.
-      const editorContainer = document.createElement('div');
-      editorContainer.classList.add('editor-container');
-      editorContainer.setAttribute('data-role', 'description');
-      editorContainer.style.minHeight = '50px';
-      // Create an inner element where Quill will attach.
-      const editorElement = document.createElement('div');
-      editorContainer.appendChild(editorElement);
-      // Replace the original description element with the editor container.
-      if (descEl && descEl.parentNode) {
-        descEl.parentNode.replaceChild(editorContainer, descEl);
-      }
-      // Initialize Quill.
-      const quill = new Quill(editorElement, {
-        theme: 'snow',
-        modules: {
-          toolbar: [
-            ['bold', 'italic', 'underline', 'strike'],
-            [{ header: 1 }, { header: 2 }],
-            [{ list: 'ordered' }, { list: 'bullet' }],
-            [{ indent: '-1' }, { indent: '+1' }],
-            [{ color: [] }, { background: [] }],
-            [{ align: [] }],
-            ['clean']
-          ]
-        }
-      });
-      // Set the editor's content and focus.
-      quill.root.innerHTML = oldValue;
-      quill.focus();
-      setTimeout(() => quill.setSelection(quill.getLength(), 0), 0);
-      // Adjust the height as text changes.
-      const adjustHeight = () => {
-        const newHeight = quill.root.scrollHeight;
-        editorElement.style.height = newHeight + 'px';
-      };
-      quill.on('text-change', adjustHeight);
-      adjustHeight();
-      // Save the Quill instance on the container for later retrieval.
-      (editorContainer as any)._quill = quill;
+    
+    const simplemde = (descEl as any)._simplemde!;
+    //const toolbar = descEl.querySelector('.editor-toolbar') as HTMLElement;
+    if (simplemde.isPreviewActive() === enable) {
+      simplemde.togglePreview();
     }
-    // If we're disabling edit mode, we need to clean up the Quill editor.
+    if (enable) {
+      descEl.dataset.mode = 'edit';
+      simplemde.codemirror.refresh();
+      simplemde.codemirror.focus();
+      // Set cursor to end of text
+      const lineCount = simplemde.codemirror.lineCount();
+      const charCount = simplemde.codemirror.getLine(lineCount - 1).length;
+      simplemde.codemirror.setCursor(lineCount, charCount);
+      //toolbar.style.removeProperty('display');
+    }
     else {
-      // If we're not in edit mode (i.e. not using the editor container), nothing to do.
-      if (!descEl || !descEl.classList.contains('editor-container')) {
-        return;
-      }
-      // Get the Quill instance.
-      const quill = (descEl as any)._quill;
-      if (!quill) return;
-      // Grab the updated HTML.
-      let newValue = quill.root.innerHTML;
-      if (newValue === '<p><br></p>') {
-        newValue = '';
-      }
-      // Create a new description element.
-      const newDescEl = document.createElement('div');
-      newDescEl.classList.add('description');
-      newDescEl.setAttribute('data-role', 'description');
-      newDescEl.innerHTML = newValue;
-      // Replace the editor container with the new description element.
-      descEl.parentNode?.replaceChild(newDescEl, descEl);
+      descEl.dataset.mode = 'display';
+      //toolbar.style.display = 'none';
     }
   }
 
   getTaskDescription(task: ITask): string | null {
     const mapping = this.taskMap.get(task.getId());
     if (!mapping) return null;
+
     const taskElem = mapping.element;
     const descEl = taskElem.querySelector('[data-role="description"]') as HTMLElement;
-    if (!descEl) return null;
-    if (descEl.classList.contains('editor-container')) {
-      const quill = (descEl as any)._quill;
-      if (!quill) return null;
-      let value = quill.root.innerHTML;
-      if (value === '<p><br></p>') {
-        value = '';
-      }
-      return value;
-    }
-    else {
-      return descEl.innerHTML;
-    }
+    const simplemde = (descEl as any)._simplemde;
+    let value = simplemde.value();
+    return value;
   }
 
   setTaskDescription(task: ITask, description: string): void {
     const mapping = this.taskMap.get(task.getId());
     if (!mapping) return;
+
     const taskElem = mapping.element;
-    // Look for either a plain description or an editor container if in edit mode.
     const descEl = taskElem.querySelector('[data-role="description"]') as HTMLElement;
-    if (!descEl) return;
-    // If editing, update the Quill editor's content.
-    if (descEl.classList.contains('editor-container')) {
-      const quill = (descEl as any)._quill;
-      if (quill) {
-        quill.root.innerHTML = description || '<p><br></p>';
-      }
-    }
-    // If not editing
-    else {
-      descEl.innerHTML = description;
-      if (description.length === 0) {
-        const expandSwitch = taskElem.querySelector('[data-role="expand-switch"]') as HTMLElement;
-        if (expandSwitch) {
-          expandSwitch.classList.add('expand-switch-add');
-        }
-      }
+    const simplemde = (descEl as any)._simplemde!;
+    simplemde.value(description || '');
+    if (simplemde.isPreviewActive()) {
+      // Refresh preview by toggling twice.
+      simplemde.togglePreview();
+      simplemde.togglePreview();
     }
   }
 

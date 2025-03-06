@@ -415,7 +415,10 @@ export class AppController {
         this.controlState.taskDescriptionEditContext = null;
       };
       if (e.type === 'mousedown' || e.type === 'click' || e.type === 'dblclick' || e.type === 'contextmenu') {
-        const taskInfo = this.presenter.getTaskInfo(this.controlState.target as Element);
+        // Because the description's markdown editor may manipulate the DOM as we click around, we need to re-check the target element.
+        const eTarget = document.elementFromPoint(this.controlState.mousePosition.x, this.controlState.mousePosition.y);
+
+        const taskInfo = this.presenter.getTaskInfo(eTarget as Element);
         const targetWasTaskDescription = taskInfo?.task === context.task && taskInfo.component === TaskComponent.Description;
 
         // We don't want to interfere with activity within the task description itself.
