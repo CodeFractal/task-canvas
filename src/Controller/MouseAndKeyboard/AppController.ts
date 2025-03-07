@@ -646,13 +646,13 @@ export class AppController {
       const ctrlHeld = this.controlState.keys['Control'] || this.controlState.keys['Meta'];
 
       // Select all tasks
-      if (this.controlState.keys['a'] && (this.controlState.keys['Control'] || this.controlState.keys['Meta'])) {
+      if (ke.key === 'a' && ctrlHeld) {
         this.selectAllTasks();
         return;
       }
 
       // Delete selected tasks
-      if (this.controlState.keys['Delete'] || this.controlState.keys['Backspace']) {
+      if (ke.key === 'Delete') {
         const tasksToDelete = Array.from(this.controlState.selectedTasks);
         this.controlState.selectedTasks.clear();
         this.app.deleteTasks(tasksToDelete);
