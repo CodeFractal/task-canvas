@@ -642,6 +642,8 @@ export class AppController {
     }
 
     if (e.type === 'keydown') {
+      const ke = e as KeyboardEvent;
+      const ctrlHeld = this.controlState.keys['Control'] || this.controlState.keys['Meta'];
 
       // Select all tasks
       if (this.controlState.keys['a'] && (this.controlState.keys['Control'] || this.controlState.keys['Meta'])) {
@@ -654,6 +656,29 @@ export class AppController {
         const tasksToDelete = Array.from(this.controlState.selectedTasks);
         this.controlState.selectedTasks.clear();
         this.app.deleteTasks(tasksToDelete);
+        return;
+      }
+
+      // Zoom In
+      if ((ke.key === '=' || ke.key === '+') && ctrlHeld) {
+        const currentScale = this.presenter.getCanvasScale();
+        this.presenter.setCanvasScale(currentScale * 1.1, this.controlState.mousePosition);
+        e.preventDefault();
+        return;
+      }
+
+      // Zoom Out
+      if (ke.key === '-' && ctrlHeld) {
+        const currentScale = this.presenter.getCanvasScale();
+        this.presenter.setCanvasScale(currentScale / 1.1, this.controlState.mousePosition);
+        e.preventDefault();
+        return;
+      }
+
+      // Reset Zoom
+      if (ke.key === '0' && ctrlHeld) {
+        this.presenter.setCanvasScale(1, this.controlState.mousePosition);
+        e.preventDefault();
         return;
       }
 

@@ -97,6 +97,16 @@ export class AppPresenter implements IControllerPresenter {
     CustomPanZoom.setTranslation(position.vec);
   }
 
+  getCanvasScale(): number {
+    return CustomPanZoom.getScale();
+  }
+
+  setCanvasScale(scale: number, center?: ScreenCoords): void {
+    // If no eigenpoint is provided, use the center of the viewport.
+    const eigenpoint = center?.vec ?? new Vector2D(window.innerWidth / 2, window.innerHeight / 2);
+    CustomPanZoom.setScale(scale, eigenpoint);
+  }
+
   getTaskPositionOnCanvas(task: ITask): CanvasCoords {
     const elem = this.getTaskElement(task);
     if (!elem) throw new Error("Task element not found");

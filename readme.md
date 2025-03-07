@@ -35,6 +35,9 @@ Scroll the canvas left/right snapping to grid lines by:
 - Holding Shift and scrolling the mouse wheel up or down
 Zoom in and out by:
 - Holding Ctrl and scrolling up (to zoom in) or down (to zoom out)
+- Holding Ctrl and pressing + (to zoom in) or - (to zoom out)
+Reset zoom by:
+- Holding Ctrl and pressing '0'
 
 ### Move Tasks
 Move a task by:

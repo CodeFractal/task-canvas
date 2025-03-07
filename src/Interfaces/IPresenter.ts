@@ -37,6 +37,18 @@ export interface IPresenter {
     setCanvasPan(position: ScreenCoords): void;
 
     /**
+     * Gets the current scale of the canvas.
+     */
+    getCanvasScale(): number;
+
+    /**
+     * Sets the scale of the canvas.
+     * @param scale The new scale factor.
+     * @param center The center point to scale around. If omitted, the center of the viewport is used.
+     */
+    setCanvasScale(scale: number, center?: ScreenCoords): void;
+
+    /**
      * Gets the current position of a task element in canvas space.
      * @param task The task to get the position of.
      */
