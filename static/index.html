@@ -15,9 +15,24 @@
   </head>
   <body>
     
-    <!-- The canvas where tasks live -->
-    <div id="canvas"></div>
-    
+    <div class="canvas-container">
+      <!-- SVG Grid Overlay -->
+      <svg id="grid-overlay" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <pattern id="grid-overlay-pattern" width="40" height="40" viewBox="0 0 1 1" patternUnits="userSpaceOnUse">
+            <path d="M0 0 L1 0 L.5 .5" stroke="none" fill="#1D1D1D"/>
+            <path d="M0 0 L0 1 L.5 .5" stroke="none" fill="#151515"/>
+            <path d="M1 0 L1 1 L.5 .5" stroke="none" fill="#0A0A0A"/>
+            <path d="M0 1 L1 1 L.5 .5" stroke="none" fill="#000000"/>
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#grid-overlay-pattern)"/>
+      </svg>      
+
+      <!-- The canvas where tasks live -->
+      <div id="canvas"></div>
+    </div>
+
     <!-- Global context menu for canvas -->
     <div id="contextMenu" style="display:none; position:absolute;">
       <div id="addTaskMenu">Add Task</div>

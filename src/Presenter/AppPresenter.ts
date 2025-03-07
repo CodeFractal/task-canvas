@@ -31,7 +31,14 @@ export class AppPresenter implements IControllerPresenter {
   constructor() {
     // Get the canvas element.
     this.canvas = document.getElementById('canvas') as HTMLElement;
-    CustomPanZoom.init(this.canvas);
+    
+    // Initialize the custom pan/zoom module for the canvas.
+    const grid = document.getElementById('grid-overlay');
+    if (!(grid instanceof SVGElement)) {
+      throw new Error("Grid overlay not found");
+    }
+    CustomPanZoom.init(this.canvas, grid);
+
     // Attempt to find an existing context menu element.
     this.contextMenuElement = document.getElementById('contextMenu');
     if (!this.contextMenuElement) {

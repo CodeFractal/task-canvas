@@ -4,15 +4,26 @@ export class CustomPanZoom {
     private static readonly minScale = 0.25;
     private static readonly maxScale = 2;
     private static readonly scrollIncrement = 20;
+    private static readonly gridSize = 40;
 
     private static canvas: HTMLElement | null = null;
+    private static gridPattern: SVGPatternElement | null = null;
     private static scale = 1;
     private static translation: Vector2D = Vector2D.zero;
 
-    public static init(el: HTMLElement): void {
-        this.canvas = el;
+    public static init(canvas: HTMLElement, grid: SVGElement): void {
+        this.canvas = canvas;
         this.canvas.style.transformOrigin = "0 0";
         this.canvas.style.cursor = "default";
+
+        const gridPattern = grid?.querySelector("pattern");
+        if (!(gridPattern instanceof SVGPatternElement)) {
+            throw new Error("Grid pattern not found");
+        }
+        this.gridPattern = gridPattern;
+        this.gridPattern.setAttribute('width', `${this.gridSize}`);
+        this.gridPattern.setAttribute('height', `${this.gridSize}`);
+
         this.updateTransform();
         (this.canvas.parentElement || this.canvas).addEventListener("wheel", e => this.onWheel(e), { passive: false });
     }
@@ -20,6 +31,11 @@ export class CustomPanZoom {
     private static updateTransform(): void {
         if (this.canvas) {
             this.canvas.style.transform = `translate(${this.translation.x}px, ${this.translation.y}px) scale(${this.scale})`;
+        }
+        if (this.gridPattern) {
+            const translateX = this.translation.x % (this.gridSize * this.scale);
+            const translateY = this.translation.y % (this.gridSize * this.scale);
+            this.gridPattern.setAttribute('patternTransform', `translate(${translateX}, ${translateY}) scale(${this.scale})`);
         }
     }
 
