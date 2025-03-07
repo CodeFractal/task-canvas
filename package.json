@@ -1,16 +1,8 @@
 {
-  "name": "taskcanvas",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "esbuild --bundle src/Startup.ts --outfile=static/bundled/app.js --sourcemap --minify",
-    "watch": "esbuild --bundle src/Startup.ts --outfile=static/bundled/app.js --sourcemap --watch"
+    "watch": "esbuild --bundle src/Startup.ts --outfile=static/bundled/app.js --sourcemap --watch",
+    "build": "esbuild --bundle src/Startup.ts --outfile=static/bundled/app.js --sourcemap --minify"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "devDependencies": {
     "esbuild": "^0.25.0",
     "ts-node": "^10.9.2",
