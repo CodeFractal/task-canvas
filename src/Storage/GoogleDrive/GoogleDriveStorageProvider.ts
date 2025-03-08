@@ -1,12 +1,14 @@
 import { IStorageProvider } from "../IStorageProvider";
 import { ICanvasDataModel, ITaskDataModel, IDependencyDataModel } from "../DataModel";
 import { GoogleDriveService } from "./GoogleDriveService";
+import { SimpleEvent } from "../../Abstract/SimpleEvent";
 
 export class GoogleDriveStorageProvider implements IStorageProvider {
     private readonly _service: GoogleDriveService;
     private canvasData: CanvasData;
     private fileId: string;
     private mimeType: string;
+    private _busyCount: number = 0;
 
     constructor(service: GoogleDriveService, fileId: string, mimeType: string) {
         this._service = service;
@@ -15,11 +17,13 @@ export class GoogleDriveStorageProvider implements IStorageProvider {
         this.canvasData = new CanvasData();
     }
 
+    public readonly isBusyChanged = new SimpleEvent<[isBusy: boolean]>();
+
+    get isBusy(): boolean { return this.busyCount > 0; }
     get locationId(): string { return this.fileId; }
 
     async retrieveCanvasData(): Promise<ICanvasDataModel> {
-        const content = await this._service.open(this.fileId);
-        const data = content ? JSON.parse(content) as ICanvasDataModel : undefined;
+        const data = await this.load() ?? undefined;
         this.canvasData = new CanvasData(data);
         return data ?? this.canvasData.toStorageModel();
     }
@@ -87,9 +91,28 @@ export class GoogleDriveStorageProvider implements IStorageProvider {
         return [task, dep];
     }
     
+    private async load(): Promise<ICanvasDataModel | null> {
+        this.busyCount++;
+        const content = await this._service.open(this.fileId);
+        this.busyCount--;
+        return content ? JSON.parse(content) as ICanvasDataModel : null;
+    }
+
     private async save(): Promise<void> {
         const content = JSON.stringify(this.canvasData.toStorageModel(), null, 2);
-        return this._service.save(this.fileId, content, this.mimeType);
+        this.busyCount++;
+        await this._service.save(this.fileId, content, this.mimeType);
+        this.busyCount--;
+    }
+
+    private get busyCount(): number { return this._busyCount; }
+    private set busyCount(value: number) {
+        const isBusy = value > 0;
+        const isBusyChanged = isBusy !== this._busyCount > 0;
+        this._busyCount = value;
+        if (isBusyChanged) {
+            this.isBusyChanged.invoke(isBusy)
+        }
     }
 }
 

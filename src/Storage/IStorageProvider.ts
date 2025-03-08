@@ -1,3 +1,4 @@
+import { IEvent } from "../Abstract/SimpleEvent";
 import { ICanvasDataModel, IDependencyDataModel, ITaskDataModel } from "./DataModel";
 
 export interface IStorageProvider {
@@ -47,5 +48,8 @@ export interface IStorageProvider {
      * @param entities The entities to remove
     */
     deleteMany(entities: ReadonlyArray<ITaskDataModel | IDependencyDataModel>): Promise<void>;
+
+    readonly isBusy: boolean;
+    readonly isBusyChanged: IEvent<[isBusy: boolean]>;
 
 }

@@ -49,6 +49,11 @@ export interface IPresenter {
     setCanvasScale(scale: number, center?: ScreenCoords): void;
 
     /**
+     * Gets the size of the canvas on the screen.
+     */
+    toggleSpinner(visible: boolean): void;
+
+    /**
      * Gets the current position of a task element in canvas space.
      * @param task The task to get the position of.
      */

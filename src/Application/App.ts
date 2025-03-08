@@ -16,6 +16,7 @@ import { IStorageProvider } from '../Storage/IStorageProvider';
 import { IStorageConnectionProvider } from '../Storage/IStorageConnectionProvider';
 import { IStorageLocation } from '../Storage/IStorageLocation';
 import { QueryStringHandler } from './QueryStringHandler';
+import { IEventSubscription } from '../Abstract/SimpleEvent';
 
 /** Object mapping task IDs to Tasks */
 const allTasks: Map<number, Task> = new Map();
@@ -34,7 +35,8 @@ const redoStack: any[] = [];
 // --------------------------------------------------
 
 export class App implements IApp {
-    private storageProvider: IStorageProvider | null = null;
+    private _storageProvider: IStorageProvider | null = null;
+    private _storageProviderSubscriptions: IEventSubscription[] = [];
     private canvasIsPaused: boolean = false;
 
     constructor(
@@ -42,6 +44,21 @@ export class App implements IApp {
         private readonly storageConnectionProviders: IStorageConnectionProvider[],
         private readonly queryStringHandler: QueryStringHandler
     ) { }
+
+    private get storageProvider(): IStorageProvider | null {
+        return this._storageProvider;
+    }
+    private set storageProvider(value: IStorageProvider | null) {
+        this._storageProvider = value;
+        this._storageProviderSubscriptions.forEach(sub => sub.unsubscribe());
+        this._storageProviderSubscriptions = [];
+        this.presenter.toggleSpinner(value?.isBusy ?? false);
+        if (value) {
+            this._storageProviderSubscriptions.push(value.isBusyChanged.subscribe(isBusy => {
+                this.presenter.toggleSpinner(isBusy);
+            }));
+        }
+    }
 
     isCanvasPaused(): boolean {
         return this.canvasIsPaused;

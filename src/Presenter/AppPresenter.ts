@@ -114,6 +114,18 @@ export class AppPresenter implements IControllerPresenter {
     CustomPanZoom.setScale(scale, eigenpoint);
   }
 
+  toggleSpinner(visible: boolean): void {
+    const spinner = document.getElementById('spinner');
+    if (!spinner) return;
+    
+    if (visible) {
+      spinner.style.removeProperty('display');
+    }
+    else {
+      spinner.style.display = 'none';
+    }
+  }
+
   getTaskPositionOnCanvas(task: ITask): CanvasCoords {
     const elem = this.getTaskElement(task);
     if (!elem) throw new Error("Task element not found");
