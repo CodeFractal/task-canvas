@@ -2,19 +2,27 @@ import { IStorageProvider } from "../IStorageProvider";
 import { ICanvasDataModel, ITaskDataModel, IDependencyDataModel } from "../DataModel";
 import { GoogleDriveService } from "./GoogleDriveService";
 import { SimpleEvent } from "../../Abstract/SimpleEvent";
+import { SafeResource } from "../../Abstract/Concurrency";
+import { DebounceScheduler } from "../../Abstract/Concurrency";
+
+/** The amount of time (in ms) to wait: after a request to save, for a follow-up request to save, before actually saving */
+const SAVE_DELAY = 1500;
+/** The minimim amount of time (in ms) to wait: after the last save completes, before attempting another save */
+const SAVE_COOLDOWN = 3500;
 
 export class GoogleDriveStorageProvider implements IStorageProvider {
     private readonly _service: GoogleDriveService;
-    private canvasData: CanvasData;
+    private readonly canvasData: SafeResource<CanvasData>;
     private fileId: string;
     private mimeType: string;
-    private _busyCount: number = 0;
+    private saveDebouncer: DebounceScheduler;
 
     constructor(service: GoogleDriveService, fileId: string, mimeType: string) {
         this._service = service;
         this.fileId = fileId;
         this.mimeType = mimeType;
-        this.canvasData = new CanvasData();
+        this.canvasData = new SafeResource(new CanvasData());
+        this.saveDebouncer = new DebounceScheduler(() => this.doSave(), SAVE_DELAY, SAVE_COOLDOWN);
     }
 
     public readonly isBusyChanged = new SimpleEvent<[isBusy: boolean]>();
@@ -24,61 +32,78 @@ export class GoogleDriveStorageProvider implements IStorageProvider {
 
     async retrieveCanvasData(): Promise<ICanvasDataModel> {
         const data = await this.load() ?? undefined;
-        this.canvasData = new CanvasData(data);
-        return data ?? this.canvasData.toStorageModel();
+        const newCanvasData = new CanvasData(data);
+        this.canvasData.setResource(newCanvasData);
+        return data ?? newCanvasData.toStorageModel();
     }
-    saveCanvasData(canvasData: ICanvasDataModel): Promise<void> {
-        this.canvasData = new CanvasData(canvasData);
-        return this.save();
+    async saveCanvasData(canvasData: ICanvasDataModel): Promise<void> {
+        const newCanvasData = new CanvasData(canvasData);
+        await this.canvasData.setResource(newCanvasData);
+        this.requestSave();
     }
-    saveTask(task: ITaskDataModel): Promise<void> {
-        this.canvasData.addOrUpdateTask(new TaskDataModel(task));
-        return this.save();
+    async saveTask(task: ITaskDataModel): Promise<void> {
+        await this.canvasData.withResource(canvasData => {
+            canvasData.addOrUpdateTask(new TaskDataModel(task));
+        });
+        this.requestSave();
     }
     async deleteTask(task: ITaskDataModel): Promise<boolean> {
-        if (this.canvasData.removeTask(new TaskDataModel(task))) {
-            await this.save();
+        const removed = await this.canvasData.withResource(canvasData => {
+            return canvasData.removeTask(new TaskDataModel(task));
+        });
+        if (removed) {
+            this.requestSave();
             return true;
         }
         return false;
     }
     async saveDependency(dependency: IDependencyDataModel): Promise<void> {
-        if (this.canvasData.addDependency(dependency)) {
-            await this.save();
+        const added = await this.canvasData.withResource(canvasData => {
+            return canvasData.addDependency(dependency);
+        });
+        if (added) {
+            this.requestSave();
         }
     }
     async deleteDependency(dependency: IDependencyDataModel): Promise<boolean> {
-        if (this.canvasData.removeDependency(dependency)) {
-            await this.save();
+        const removed = await this.canvasData.withResource(canvasData => {
+            return canvasData.removeDependency(dependency);
+        });
+        if (removed) {
+            this.requestSave();
             return true;
         }
         return false;
     }
     async saveMany(entities: ReadonlyArray<ITaskDataModel | IDependencyDataModel>): Promise<void> {
         let changed = false;
-        for (const entity of entities) {
-            const [task, dep] = this.resolveDataModel(entity);
+        await this.canvasData.withResource(canvasData => {
+            for (const entity of entities) {
+                const [task, dep] = this.resolveDataModel(entity);
 
-            if (task) changed = this.canvasData.addOrUpdateTask(new TaskDataModel(task)) || changed;
-            else if (dep) changed = this.canvasData.addDependency(dep) || changed;
-        }
+                if (task) changed = canvasData.addOrUpdateTask(new TaskDataModel(task)) || changed;
+                else if (dep) changed = canvasData.addDependency(dep) || changed;
+            }
+        });
         if (changed) {
-            await this.save();
+            this.requestSave();
         }
     }
     async deleteMany(entities: ReadonlyArray<ITaskDataModel | IDependencyDataModel>): Promise<void> {
         let changed = false;
-        for (const entity of entities) {
-            let task: ITaskDataModel | undefined = entity as ITaskDataModel;
-            if (!task.title) task = undefined;
-            let dep: IDependencyDataModel | undefined = entity as IDependencyDataModel;
-            if (task || !dep.requiredTaskId) dep = undefined;
-
-            if (task) changed = this.canvasData.removeTask(new TaskDataModel(task)) || changed;
-            else if (dep) changed = this.canvasData.removeDependency(dep) || changed;
-        }
+        await this.canvasData.withResource(canvasData => {
+            for (const entity of entities) {
+                let task: ITaskDataModel | undefined = entity as ITaskDataModel;
+                if (!task.title) task = undefined;
+                let dep: IDependencyDataModel | undefined = entity as IDependencyDataModel;
+                if (task || !dep.requiredTaskId) dep = undefined;
+    
+                if (task) changed = canvasData.removeTask(new TaskDataModel(task)) || changed;
+                else if (dep) changed = canvasData.removeDependency(dep) || changed;
+            }
+        });
         if (changed) {
-            await this.save();
+            this.requestSave();
         }
     }
 
@@ -98,13 +123,20 @@ export class GoogleDriveStorageProvider implements IStorageProvider {
         return content ? JSON.parse(content) as ICanvasDataModel : null;
     }
 
-    private async save(): Promise<void> {
-        const content = JSON.stringify(this.canvasData.toStorageModel(), null, 2);
+    private requestSave(): void {
+        this.saveDebouncer.request();
+    }
+
+    private async doSave(): Promise<void> {
+        const data = await this.canvasData.withResource(canvasData => canvasData);
+        const content = JSON.stringify(data.toStorageModel(), null, 2);
+        
         this.busyCount++;
         await this._service.save(this.fileId, content, this.mimeType);
         this.busyCount--;
     }
 
+    private _busyCount: number = 0;
     private get busyCount(): number { return this._busyCount; }
     private set busyCount(value: number) {
         const isBusy = value > 0;
